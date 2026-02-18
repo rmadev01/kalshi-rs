@@ -15,7 +15,7 @@ fn bench_orderbook_delta(c: &mut Criterion) {
 
             // Pre-populate with some levels
             for i in 1..=size {
-                book.set_level(i as u8 % 99 + 1, 100, Side::Yes);
+                book.set_level((i % 99 + 1) as i64, 100, Side::Yes);
             }
 
             b.iter(|| {
@@ -37,7 +37,7 @@ fn bench_orderbook_best_bid(c: &mut Criterion) {
 
             // Pre-populate with levels
             for i in 1..=size {
-                book.set_level(i as u8 % 99 + 1, 100, Side::Yes);
+                book.set_level((i % 99 + 1) as i64, 100, Side::Yes);
             }
 
             b.iter(|| {
@@ -53,9 +53,9 @@ fn bench_orderbook_spread(c: &mut Criterion) {
     let mut book = Orderbook::new("BENCH");
 
     // Set up a realistic book
-    for i in 1..=50 {
-        book.set_level(40 + i as u8 % 10, 100 * i, Side::Yes);
-        book.set_level(50 + i as u8 % 10, 100 * i, Side::No);
+    for i in 1i64..=50 {
+        book.set_level(40 + i % 10, 100 * i, Side::Yes);
+        book.set_level(50 + i % 10, 100 * i, Side::No);
     }
 
     c.bench_function("orderbook_spread", |b| {

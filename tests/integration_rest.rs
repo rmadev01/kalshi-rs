@@ -53,8 +53,9 @@ async fn test_get_exchange_status() {
 
     let status = status.unwrap();
     println!("Exchange status: {:?}", status);
-    // Exchange should be in some state
-    assert!(!status.exchange_active || status.exchange_active);
+    // Just verify we got a response with boolean fields
+    let _ = status.exchange_active;
+    let _ = status.trading_active;
 }
 
 #[tokio::test]
