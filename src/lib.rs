@@ -13,16 +13,38 @@
 //!
 //! ```rust,no_run
 //! use kalshi_rs::{Config, KalshiClient};
+//! use kalshi_rs::types::{CreateOrderRequest, Side, Action};
 //!
 //! #[tokio::main]
 //! async fn main() -> Result<(), kalshi_rs::Error> {
-//!     let config = Config::new("api-key-id", "private-key-pem-contents");
+//!     // Create client with API credentials
+//!     let private_key = std::fs::read_to_string("private_key.pem")?;
+//!     let config = Config::new("api-key-id", &private_key);
 //!     let client = KalshiClient::new(config)?;
 //!     
-//!     // Use the client...
+//!     // Get markets
+//!     let markets = client.rest().get_markets(Some("open"), None, None).await?;
+//!     
+//!     // Place an order (buy 10 Yes contracts at $0.50)
+//!     let order = CreateOrderRequest::limit(
+//!         &markets.markets[0].ticker,
+//!         Side::Yes,
+//!         Action::Buy,
+//!         10,
+//!         5000, // Price in centi-cents ($0.50 = 5000 centi-cents)
+//!     );
+//!     let response = client.rest().create_order(&order).await?;
+//!     
 //!     Ok(())
 //! }
 //! ```
+//!
+//! ## Price Representation
+//!
+//! Kalshi uses **centi-cents** for subpenny precision:
+//! - 100 centi-cents = 1 cent = $0.01
+//! - 5000 centi-cents = 50 cents = $0.50
+//! - 9900 centi-cents = 99 cents = $0.99
 //!
 //! ## Architecture
 //!
@@ -38,7 +60,7 @@
 //!
 //! This crate is designed for low-latency trading workloads:
 //!
-//! - Integer prices (cents) instead of floating point
+//! - Integer prices (centi-cents) instead of floating point
 //! - `FxHashMap` for faster hashing of small keys
 //! - `parking_lot` mutexes (faster than std)
 //! - Minimal allocations in hot paths
@@ -69,16 +91,22 @@ pub type Result<T> = std::result::Result<T, Error>;
 ///
 /// ```rust,no_run
 /// use kalshi_rs::{Config, KalshiClient};
+/// use kalshi_rs::types::{CreateOrderRequest, Side, Action};
 ///
 /// # async fn example() -> kalshi_rs::Result<()> {
 /// let config = Config::new("api-key", "private-key-pem");
 /// let client = KalshiClient::new(config)?;
 ///
-/// // REST API calls
-/// // let markets = client.get_markets().await?;
+/// // Get markets
+/// let markets = client.rest().get_markets(Some("open"), None, None).await?;
 ///
-/// // WebSocket connection
-/// // let ws = client.websocket().await?;
+/// // Get your balance
+/// let balance = client.rest().get_balance().await?;
+/// println!("Balance: ${:.2}", balance.balance as f64 / 10000.0);
+///
+/// // Place an order
+/// let order = CreateOrderRequest::limit("TICKER", Side::Yes, Action::Buy, 10, 5000);
+/// let response = client.rest().create_order(&order).await?;
 /// # Ok(())
 /// # }
 /// ```

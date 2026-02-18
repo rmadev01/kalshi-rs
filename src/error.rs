@@ -12,11 +12,14 @@ pub enum Error {
     /// HTTP request failed
     Http(reqwest::Error),
 
-    /// WebSocket error
-    WebSocket(tokio_tungstenite::tungstenite::Error),
+    /// WebSocket error (boxed to reduce enum size)
+    WebSocket(Box<tokio_tungstenite::tungstenite::Error>),
 
     /// JSON serialization/deserialization error
     Json(serde_json::Error),
+
+    /// IO error (file reading, etc.)
+    Io(std::io::Error),
 
     /// RSA cryptography error (key parsing, signing)
     Crypto(String),
@@ -71,6 +74,7 @@ impl fmt::Display for Error {
             Error::Http(e) => write!(f, "HTTP error: {}", e),
             Error::WebSocket(e) => write!(f, "WebSocket error: {}", e),
             Error::Json(e) => write!(f, "JSON error: {}", e),
+            Error::Io(e) => write!(f, "IO error: {}", e),
             Error::Crypto(msg) => write!(f, "Crypto error: {}", msg),
             Error::Config(msg) => write!(f, "Configuration error: {}", msg),
             Error::Api(e) => write!(f, "API error ({}): {}", e.status, e.message),
@@ -96,8 +100,9 @@ impl std::error::Error for Error {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Error::Http(e) => Some(e),
-            Error::WebSocket(e) => Some(e),
+            Error::WebSocket(e) => Some(e.as_ref()),
             Error::Json(e) => Some(e),
+            Error::Io(e) => Some(e),
             _ => None,
         }
     }
@@ -111,13 +116,19 @@ impl From<reqwest::Error> for Error {
 
 impl From<tokio_tungstenite::tungstenite::Error> for Error {
     fn from(err: tokio_tungstenite::tungstenite::Error) -> Self {
-        Error::WebSocket(err)
+        Error::WebSocket(Box::new(err))
     }
 }
 
 impl From<serde_json::Error> for Error {
     fn from(err: serde_json::Error) -> Self {
         Error::Json(err)
+    }
+}
+
+impl From<std::io::Error> for Error {
+    fn from(err: std::io::Error) -> Self {
+        Error::Io(err)
     }
 }
 

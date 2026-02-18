@@ -17,46 +17,60 @@ Add to your `Cargo.toml`:
 ```toml
 [dependencies]
 kalshi-rs = "0.1"
+tokio = { version = "1", features = ["full"] }
 ```
 
 ## Quick Start
 
 ```rust
 use kalshi_rs::{KalshiClient, Config};
+use kalshi_rs::types::{CreateOrderRequest, Side, Action};
 
 #[tokio::main]
 async fn main() -> Result<(), kalshi_rs::Error> {
-    // Create client with API credentials
-    let config = Config::new(
-        "your-api-key-id",
-        include_str!("path/to/private_key.pem"),
-    );
+    // Load your private key
+    let private_key = std::fs::read_to_string("private_key.pem")?;
     
+    // Create client with API credentials
+    let config = Config::new("your-api-key-id", &private_key);
     let client = KalshiClient::new(config)?;
     
-    // Get markets
-    let markets = client.get_markets().await?;
-    println!("Found {} markets", markets.len());
+    // Get open markets
+    let markets = client.rest().get_markets(Some("open"), None, None).await?;
+    println!("Found {} open markets", markets.markets.len());
     
-    // Subscribe to orderbook updates
-    let mut ws = client.websocket().await?;
-    ws.subscribe_orderbook(&["KXBTC-25JAN"]).await?;
+    // Get your balance (values in centi-cents: 10000 = $1.00)
+    let balance = client.rest().get_balance().await?;
+    println!("Balance: ${:.2}", balance.balance as f64 / 10000.0);
     
-    while let Some(msg) = ws.next().await {
-        match msg? {
-            Message::OrderbookSnapshot(snap) => {
-                println!("Snapshot: {:?}", snap);
-            }
-            Message::OrderbookDelta(delta) => {
-                println!("Delta: {:?}", delta);
-            }
-            _ => {}
-        }
-    }
+    // Place a limit order (buy 10 Yes contracts at $0.50)
+    let order = CreateOrderRequest::limit(
+        "MARKET-TICKER",
+        Side::Yes,
+        Action::Buy,
+        10,     // count
+        5000,   // price in centi-cents ($0.50)
+    );
+    let response = client.rest().create_order(&order).await?;
+    println!("Order placed: {}", response.order.order_id);
+    
+    // Cancel the order
+    client.rest().cancel_order(&response.order.order_id).await?;
     
     Ok(())
 }
 ```
+
+## Price Representation
+
+Kalshi uses **centi-cents** for subpenny precision:
+
+| Centi-cents | Cents | Dollars | Description |
+|-------------|-------|---------|-------------|
+| 100 | 1¢ | $0.01 | 1% implied probability |
+| 5000 | 50¢ | $0.50 | 50% implied probability |
+| 9900 | 99¢ | $0.99 | 99% implied probability |
+| 5050 | 50.5¢ | $0.505 | Subpenny pricing |
 
 ## Architecture
 
@@ -70,14 +84,15 @@ This crate is designed for low-latency trading:
 | **Hashing** | `FxHashMap` (2-3x faster than std for small keys) |
 | **Locking** | `parking_lot` mutexes (faster, no poisoning) |
 | **Memory** | Pre-allocated buffers, minimal allocations in hot paths |
-| **Parsing** | Serde with `#[serde(borrow)]` for zero-copy where possible |
+| **Parsing** | Serde with efficient deserialization |
+| **Errors** | Boxed large variants to keep `Result` small |
 
 ### Module Structure
 
 ```
 kalshi-rs/
 ├── client/       # REST and WebSocket clients
-│   ├── rest      # HTTP client with retry logic
+│   ├── rest      # HTTP client with auth
 │   ├── websocket # Real-time data streaming  
 │   └── auth      # RSA-PSS request signing
 ├── types/        # API types (orders, markets, messages)
@@ -89,18 +104,40 @@ kalshi-rs/
 
 ### REST Endpoints
 
-- [ ] Authentication (RSA-PSS signing)
-- [ ] Markets (`GET /markets`, `GET /markets/{ticker}`)
-- [ ] Events (`GET /events`, `GET /events/{ticker}`)
-- [ ] Orders (`POST /portfolio/orders`, `DELETE /portfolio/orders/{id}`)
-- [ ] Batch Orders (`POST /portfolio/orders/batched`)
-- [ ] Portfolio (`GET /portfolio/balance`, `GET /portfolio/positions`)
-- [ ] Fills (`GET /portfolio/fills`)
+**Market Data:**
+- [x] `GET /markets` - List markets with filters
+- [x] `GET /markets/{ticker}` - Get single market
+- [x] `GET /markets/{ticker}/orderbook` - Get orderbook
+- [x] `GET /markets/trades` - Get public trades
+- [x] `GET /events` - List events
+- [x] `GET /events/{ticker}` - Get single event
+- [x] `GET /series/{ticker}` - Get series info
+
+**Orders:**
+- [x] `POST /portfolio/orders` - Create order
+- [x] `GET /portfolio/orders` - List orders
+- [x] `GET /portfolio/orders/{id}` - Get single order
+- [x] `DELETE /portfolio/orders/{id}` - Cancel order
+- [x] `POST /portfolio/orders/{id}/amend` - Amend order
+- [x] `POST /portfolio/orders/{id}/decrease` - Decrease order
+- [x] `POST /portfolio/orders/batched` - Batch create orders
+- [x] `DELETE /portfolio/orders/batched` - Batch cancel orders
+- [x] `GET /portfolio/orders/queue_positions` - Get queue positions
+
+**Portfolio:**
+- [x] `GET /portfolio/balance` - Get balance
+- [x] `GET /portfolio/positions` - Get positions
+- [x] `GET /portfolio/fills` - Get fills
+- [x] `GET /portfolio/settlements` - Get settlements
+
+**Exchange:**
+- [x] `GET /exchange/status` - Exchange status
+- [x] `GET /exchange/schedule` - Exchange schedule
 
 ### WebSocket Channels
 
 - [ ] `orderbook_delta` - Real-time orderbook updates
-- [ ] `ticker` - Price/volume updates
+- [ ] `ticker` - Price/volume updates  
 - [ ] `trade` - Public trade feed
 - [ ] `fill` - Your fill notifications
 - [ ] `user_orders` - Your order updates
@@ -117,15 +154,21 @@ Kalshi has tiered rate limits:
 | Premier | 100/s | 100/s |
 | Prime | 400/s | 400/s |
 
-This client respects rate limits and provides backoff strategies.
+The client handles 429 rate limit responses and provides `retry_after_ms` in the error.
 
-## Examples
+## Demo Environment
 
-See the [`examples/`](examples/) directory:
+For testing, use Kalshi's demo environment:
 
-- `simple_connection.rs` - Basic REST API usage
-- `orderbook_viewer.rs` - Real-time orderbook display
-- `place_order.rs` - Order placement example
+```rust
+use kalshi_rs::{Config, config::Environment};
+
+let config = Config::builder()
+    .api_key_id("demo-api-key")
+    .private_key_pem(&private_key)
+    .environment(Environment::Demo)
+    .build();
+```
 
 ## Testing
 
@@ -136,8 +179,8 @@ cargo test
 # Run benchmarks
 cargo bench
 
-# Run with demo environment
-KALSHI_ENV=demo cargo run --example simple_connection
+# Check for issues
+cargo clippy
 ```
 
 ## License
@@ -150,4 +193,4 @@ This software is provided as-is. Trading on Kalshi involves financial risk. The 
 
 ## Contributing
 
-Contributions welcome! Please read the contributing guidelines and submit PRs.
+Contributions welcome! Please submit PRs with tests.

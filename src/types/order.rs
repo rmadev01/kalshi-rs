@@ -53,19 +53,14 @@ pub enum OrderStatus {
 }
 
 /// Order type
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum OrderType {
     /// Limit order - specify price and quantity
+    #[default]
     Limit,
     /// Market order - execute at best available price
     Market,
-}
-
-impl Default for OrderType {
-    fn default() -> Self {
-        OrderType::Limit
-    }
 }
 
 /// Self-trade prevention type
@@ -95,33 +90,78 @@ pub struct CreateOrderRequest {
     pub action: Action,
 
     /// Number of contracts
-    pub count: u32,
+    pub count: i64,
 
     /// Order type (limit or market)
     #[serde(rename = "type")]
     pub order_type: OrderType,
 
-    /// Limit price in cents (required for limit orders)
+    /// Limit price in centi-cents (required for limit orders)
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub yes_price: Option<u8>,
+    pub yes_price: Option<i64>,
 
-    /// Expiration time (ISO 8601, optional)
+    /// No price in centi-cents (alternative to yes_price)
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub expiration_ts: Option<String>,
+    pub no_price: Option<i64>,
+
+    /// Expiration time in seconds from now
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expiration_ts: Option<i64>,
 
     /// Self-trade prevention type
     #[serde(skip_serializing_if = "Option::is_none")]
     pub self_trade_prevention_type: Option<SelfTradePrevention>,
+
+    /// Buy max cost in centi-cents (for market orders)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub buy_max_cost: Option<i64>,
+
+    /// Sell position floor (minimum position to maintain)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sell_position_floor: Option<i64>,
+
+    /// Time in force
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub time_in_force: Option<TimeInForce>,
+
+    /// Order group ID
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub order_group_id: Option<String>,
+
+    /// Subaccount ID (0 = primary, 1-32 = subaccounts)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub subaccount: Option<i32>,
+}
+
+/// Time-in-force options
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TimeInForce {
+    /// Good till canceled
+    Gtc,
+    /// Good till date
+    Gtd,
+    /// Immediate or cancel
+    Ioc,
+    /// Fill or kill
+    Fok,
 }
 
 impl CreateOrderRequest {
     /// Create a new limit order request
+    ///
+    /// # Arguments
+    /// * `ticker` - Market ticker
+    /// * `side` - Yes or No
+    /// * `action` - Buy or Sell
+    /// * `count` - Number of contracts
+    /// * `price_centicents` - Price in centi-cents (e.g., 5000 = $0.50)
     pub fn limit(
         ticker: impl Into<String>,
         side: Side,
         action: Action,
-        count: u32,
-        price_cents: u8,
+        count: i64,
+        price_centicents: i64,
     ) -> Self {
         Self {
             ticker: ticker.into(),
@@ -130,14 +170,20 @@ impl CreateOrderRequest {
             action,
             count,
             order_type: OrderType::Limit,
-            yes_price: Some(price_cents),
+            yes_price: Some(price_centicents),
+            no_price: None,
             expiration_ts: None,
             self_trade_prevention_type: None,
+            buy_max_cost: None,
+            sell_position_floor: None,
+            time_in_force: None,
+            order_group_id: None,
+            subaccount: None,
         }
     }
 
     /// Create a new market order request
-    pub fn market(ticker: impl Into<String>, side: Side, action: Action, count: u32) -> Self {
+    pub fn market(ticker: impl Into<String>, side: Side, action: Action, count: i64) -> Self {
         Self {
             ticker: ticker.into(),
             client_order_id: None,
@@ -146,14 +192,44 @@ impl CreateOrderRequest {
             count,
             order_type: OrderType::Market,
             yes_price: None,
+            no_price: None,
             expiration_ts: None,
             self_trade_prevention_type: None,
+            buy_max_cost: None,
+            sell_position_floor: None,
+            time_in_force: None,
+            order_group_id: None,
+            subaccount: None,
         }
     }
 
     /// Set a client order ID for idempotency
     pub fn with_client_order_id(mut self, id: impl Into<String>) -> Self {
         self.client_order_id = Some(id.into());
+        self
+    }
+
+    /// Set the order group ID
+    pub fn with_order_group(mut self, group_id: impl Into<String>) -> Self {
+        self.order_group_id = Some(group_id.into());
+        self
+    }
+
+    /// Set time-in-force
+    pub fn with_time_in_force(mut self, tif: TimeInForce) -> Self {
+        self.time_in_force = Some(tif);
+        self
+    }
+
+    /// Set expiration time in seconds from now
+    pub fn with_expiration_ts(mut self, ts: i64) -> Self {
+        self.expiration_ts = Some(ts);
+        self
+    }
+
+    /// Set subaccount
+    pub fn with_subaccount(mut self, subaccount: i32) -> Self {
+        self.subaccount = Some(subaccount);
         self
     }
 }
@@ -186,29 +262,62 @@ pub struct Order {
     #[serde(rename = "type")]
     pub order_type: OrderType,
 
-    /// Price in cents (for yes side)
-    pub yes_price: u8,
+    /// Price in centi-cents (for yes side)
+    pub yes_price: i64,
 
-    /// Price in cents (for no side, computed as 100 - yes_price)
-    pub no_price: u8,
+    /// Price in centi-cents (for no side, computed as 10000 - yes_price)
+    pub no_price: i64,
 
     /// Number of contracts filled
-    pub fill_count: u32,
+    #[serde(default)]
+    pub fill_count: i64,
 
     /// Number of contracts remaining
-    pub remaining_count: u32,
+    #[serde(default)]
+    pub remaining_count: i64,
 
     /// Total count initially requested
-    pub initial_count: u32,
+    #[serde(default)]
+    pub initial_count: Option<i64>,
+
+    /// Queue position (if resting)
+    pub queue_position: Option<i64>,
+
+    /// Expiration time (ISO 8601)
+    pub expiration_time: Option<String>,
+
+    /// Time-in-force
+    pub time_in_force: Option<String>,
 
     /// When the order was created
     pub created_time: Option<String>,
 
-    /// When the order was last updated
+    /// When the order was last updated  
     pub updated_time: Option<String>,
 
-    /// When the order expires (if set)
-    pub expiration_time: Option<String>,
+    /// Subaccount ID
+    pub subaccount: Option<i32>,
+
+    /// Order group ID
+    pub order_group_id: Option<String>,
+
+    /// Decrease count (for decrease operations)
+    pub decrease_count: Option<i64>,
+
+    /// Maker fills
+    pub maker_fill_count: Option<i64>,
+
+    /// Taker fills
+    pub taker_fill_count: Option<i64>,
+
+    /// Maker fees in centi-cents
+    pub maker_fees: Option<i64>,
+
+    /// Taker fees in centi-cents
+    pub taker_fees: Option<i64>,
+
+    /// Amount spent/received in centi-cents
+    pub total_cost: Option<i64>,
 }
 
 /// Response from creating an order
@@ -228,13 +337,141 @@ pub struct CancelOrderResponse {
 /// Request to amend an existing order
 #[derive(Debug, Clone, Serialize)]
 pub struct AmendOrderRequest {
-    /// New price in cents (optional)
+    /// New price in centi-cents (optional)
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub price: Option<u8>,
+    pub price: Option<i64>,
 
     /// New count (must be >= current fill_count)
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub count: Option<u32>,
+    pub count: Option<i64>,
+
+    /// Subaccount ID
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub subaccount: Option<i32>,
+}
+
+/// Response from amending an order
+#[derive(Debug, Clone, Deserialize)]
+pub struct AmendOrderResponse {
+    /// The amended order
+    pub order: Order,
+}
+
+/// Request to decrease an order's quantity
+#[derive(Debug, Clone, Serialize)]
+pub struct DecreaseOrderRequest {
+    /// Amount to reduce by
+    pub reduce_by: i64,
+
+    /// Subaccount ID
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub subaccount: Option<i32>,
+}
+
+/// Response from decreasing an order
+#[derive(Debug, Clone, Deserialize)]
+pub struct DecreaseOrderResponse {
+    /// The decreased order
+    pub order: Order,
+}
+
+/// Response from getting orders
+#[derive(Debug, Clone, Deserialize)]
+pub struct GetOrdersResponse {
+    /// List of orders
+    pub orders: Vec<Order>,
+
+    /// Cursor for pagination
+    pub cursor: Option<String>,
+}
+
+/// Response from getting a single order
+#[derive(Debug, Clone, Deserialize)]
+pub struct GetOrderResponse {
+    /// The order
+    pub order: Order,
+}
+
+/// Request to batch create orders
+#[derive(Debug, Clone, Serialize)]
+pub struct BatchCreateOrdersRequest {
+    /// List of order requests
+    pub orders: Vec<CreateOrderRequest>,
+}
+
+/// Result of a single order in a batch
+#[derive(Debug, Clone, Deserialize)]
+pub struct BatchOrderResult {
+    /// The order (if successful)
+    pub order: Option<Order>,
+
+    /// Error message (if failed)
+    pub error: Option<BatchOrderError>,
+}
+
+/// Error in batch order
+#[derive(Debug, Clone, Deserialize)]
+pub struct BatchOrderError {
+    /// Error code
+    pub code: Option<String>,
+
+    /// Error message
+    pub message: String,
+}
+
+/// Response from batch creating orders
+#[derive(Debug, Clone, Deserialize)]
+pub struct BatchCreateOrdersResponse {
+    /// Results for each order
+    pub orders: Vec<BatchOrderResult>,
+}
+
+/// Request to batch cancel orders
+#[derive(Debug, Clone, Serialize)]
+pub struct BatchCancelOrdersRequest {
+    /// List of order IDs to cancel
+    pub order_ids: Vec<String>,
+
+    /// Subaccount ID
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub subaccount: Option<i32>,
+}
+
+/// Result of a batch cancel operation
+#[derive(Debug, Clone, Deserialize)]
+pub struct BatchCancelResult {
+    /// Order ID
+    pub order_id: String,
+
+    /// The canceled order (if successful)
+    pub order: Option<Order>,
+
+    /// Error message (if failed)
+    pub error: Option<BatchOrderError>,
+}
+
+/// Response from batch canceling orders
+#[derive(Debug, Clone, Deserialize)]
+pub struct BatchCancelOrdersResponse {
+    /// Results for each order
+    pub orders: Vec<BatchCancelResult>,
+}
+
+/// Order queue position
+#[derive(Debug, Clone, Deserialize)]
+pub struct QueuePosition {
+    /// Order ID
+    pub order_id: String,
+
+    /// Queue position (contracts ahead)
+    pub queue_position: i64,
+}
+
+/// Response from getting queue positions
+#[derive(Debug, Clone, Deserialize)]
+pub struct GetOrderQueuePositionsResponse {
+    /// Queue positions for orders
+    pub queue_positions: Vec<QueuePosition>,
 }
 
 #[cfg(test)]
@@ -249,12 +486,12 @@ mod tests {
 
     #[test]
     fn test_create_limit_order() {
-        let order = CreateOrderRequest::limit("KXBTC-25JAN", Side::Yes, Action::Buy, 10, 55);
+        let order = CreateOrderRequest::limit("KXBTC-25JAN", Side::Yes, Action::Buy, 10, 5500);
         assert_eq!(order.ticker, "KXBTC-25JAN");
         assert_eq!(order.side, Side::Yes);
         assert_eq!(order.action, Action::Buy);
         assert_eq!(order.count, 10);
-        assert_eq!(order.yes_price, Some(55));
+        assert_eq!(order.yes_price, Some(5500));
         assert_eq!(order.order_type, OrderType::Limit);
     }
 
@@ -272,5 +509,17 @@ mod tests {
 
         let side: Side = serde_json::from_str("\"no\"").unwrap();
         assert_eq!(side, Side::No);
+    }
+
+    #[test]
+    fn test_order_builder() {
+        let order = CreateOrderRequest::limit("TEST", Side::Yes, Action::Buy, 10, 5000)
+            .with_client_order_id("my-order-123")
+            .with_time_in_force(TimeInForce::Gtc)
+            .with_subaccount(1);
+
+        assert_eq!(order.client_order_id, Some("my-order-123".to_string()));
+        assert_eq!(order.time_in_force, Some(TimeInForce::Gtc));
+        assert_eq!(order.subaccount, Some(1));
     }
 }
