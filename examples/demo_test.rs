@@ -1,6 +1,5 @@
 //! Quick test to verify API authentication works with PKCS#1 keys
 use kalshi_rs::{Config, KalshiClient};
-use kalshi_rs::config::Environment;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -19,9 +18,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "PKCS#8"
     });
     
-    // Create config for demo environment
-    let config = Config::new(&api_key, &private_key)
-        .with_environment(Environment::Demo);
+    // Create config for production environment (default)
+    let config = Config::new(&api_key, &private_key);
     
     println!("Config created successfully!");
     println!("Base URL: {}", config.rest_base_url());
