@@ -103,11 +103,31 @@ impl Signer {
     }
 
     /// Get the current timestamp in milliseconds
+    ///
+    /// # Panics
+    ///
+    /// This function will panic if the system time is before the UNIX epoch,
+    /// which should never happen on a properly configured system.
+    #[must_use]
     pub fn current_timestamp_ms() -> u64 {
+        // Note: In practice, system time should never be before UNIX epoch.
+        // If it is, there's a serious system misconfiguration and panicking
+        // is appropriate as no trading should occur with invalid timestamps.
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
-            .expect("System time before UNIX epoch")
+            .expect("System time before UNIX epoch - check system clock")
             .as_millis() as u64
+    }
+
+    /// Get the current timestamp in milliseconds, returning an error on failure
+    ///
+    /// Use this if you need to handle the (extremely unlikely) case where
+    /// the system clock is misconfigured.
+    pub fn try_current_timestamp_ms() -> Result<u64, Error> {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis() as u64)
+            .map_err(|_| Error::Config("System time before UNIX epoch".to_string()))
     }
 }
 

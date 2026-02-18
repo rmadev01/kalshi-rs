@@ -51,6 +51,7 @@ pub struct Orderbook {
 
 impl Orderbook {
     /// Create a new empty orderbook for the given market
+    #[must_use]
     pub fn new(market_ticker: impl Into<String>) -> Self {
         Self {
             market_ticker: market_ticker.into(),
@@ -61,12 +62,14 @@ impl Orderbook {
     }
 
     /// Get the market ticker
+    #[must_use]
     pub fn market_ticker(&self) -> &str {
         &self.market_ticker
     }
 
     /// Get the current sequence number
-    pub fn sequence(&self) -> u64 {
+    #[must_use]
+    pub const fn sequence(&self) -> u64 {
         self.sequence
     }
 
@@ -195,6 +198,7 @@ impl Orderbook {
     /// Get the best bid (highest yes bid)
     ///
     /// Returns `(price, quantity)` or `None` if no bids.
+    #[must_use]
     pub fn best_bid(&self) -> Option<(Price, Quantity)> {
         self.yes_bids.last_key_value().map(|(&p, &q)| (p, q))
     }
@@ -202,6 +206,7 @@ impl Orderbook {
     /// Get the best ask (lowest yes ask)
     ///
     /// Returns `(price, quantity)` or `None` if no asks.
+    #[must_use]
     pub fn best_ask(&self) -> Option<(Price, Quantity)> {
         self.yes_asks.first_key_value().map(|(&p, &q)| (p, q))
     }
@@ -209,6 +214,7 @@ impl Orderbook {
     /// Get the mid price
     ///
     /// Returns the average of best bid and best ask, or `None` if either is missing.
+    #[must_use]
     pub fn mid_price(&self) -> Option<f64> {
         match (self.best_bid(), self.best_ask()) {
             (Some((bid, _)), Some((ask, _))) => Some((bid as f64 + ask as f64) / 2.0),
@@ -217,6 +223,7 @@ impl Orderbook {
     }
 
     /// Get the spread in cents
+    #[must_use]
     pub fn spread(&self) -> Option<Price> {
         match (self.best_bid(), self.best_ask()) {
             (Some((bid, _)), Some((ask, _))) => Some(ask.saturating_sub(bid)),
@@ -227,6 +234,7 @@ impl Orderbook {
     /// Check if the book is crossed (best bid >= best ask)
     ///
     /// This shouldn't happen in a healthy market but is useful for validation.
+    #[must_use]
     pub fn is_crossed(&self) -> bool {
         match (self.best_bid(), self.best_ask()) {
             (Some((bid, _)), Some((ask, _))) => bid >= ask,
@@ -245,21 +253,25 @@ impl Orderbook {
     }
 
     /// Get the top N bid levels
+    #[must_use]
     pub fn top_bids(&self, n: usize) -> Vec<(Price, Quantity)> {
         self.bids().take(n).collect()
     }
 
     /// Get the top N ask levels
+    #[must_use]
     pub fn top_asks(&self, n: usize) -> Vec<(Price, Quantity)> {
         self.asks().take(n).collect()
     }
 
     /// Get total bid quantity
+    #[must_use]
     pub fn total_bid_quantity(&self) -> Quantity {
         self.yes_bids.values().sum()
     }
 
     /// Get total ask quantity
+    #[must_use]
     pub fn total_ask_quantity(&self) -> Quantity {
         self.yes_asks.values().sum()
     }
@@ -272,11 +284,13 @@ impl Orderbook {
     }
 
     /// Check if the orderbook is empty
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.yes_bids.is_empty() && self.yes_asks.is_empty()
     }
 
     /// Get the number of price levels
+    #[must_use]
     pub fn num_levels(&self) -> (usize, usize) {
         (self.yes_bids.len(), self.yes_asks.len())
     }

@@ -23,7 +23,7 @@
 //! # }
 //! ```
 
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 
 use futures_util::stream::{SplitSink, SplitStream};
 use futures_util::{SinkExt, StreamExt};
@@ -65,9 +65,9 @@ pub struct WebSocketClient {
     read: SplitStream<WsStream>,
     message_id: u64,
     /// Active subscriptions by sid
-    subscriptions: HashMap<u64, SubscriptionInfo>,
+    subscriptions: FxHashMap<u64, SubscriptionInfo>,
     /// Pending subscription requests by message id
-    pending_subscriptions: HashMap<u64, PendingSubscription>,
+    pending_subscriptions: FxHashMap<u64, PendingSubscription>,
 }
 
 /// Information about a pending subscription request
@@ -116,8 +116,8 @@ impl WebSocketClient {
             write,
             read,
             message_id: 1,
-            subscriptions: HashMap::new(),
-            pending_subscriptions: HashMap::new(),
+            subscriptions: FxHashMap::default(),
+            pending_subscriptions: FxHashMap::default(),
         })
     }
 
@@ -131,16 +131,19 @@ impl WebSocketClient {
     }
 
     /// Get the next message ID without incrementing
-    pub fn next_message_id(&self) -> u64 {
+    #[must_use]
+    pub const fn next_message_id(&self) -> u64 {
         self.message_id
     }
 
     /// Get all active subscriptions
-    pub fn subscriptions(&self) -> &HashMap<u64, SubscriptionInfo> {
+    #[must_use]
+    pub fn subscriptions(&self) -> &FxHashMap<u64, SubscriptionInfo> {
         &self.subscriptions
     }
 
     /// Get subscription info by sid
+    #[must_use]
     pub fn get_subscription(&self, sid: u64) -> Option<&SubscriptionInfo> {
         self.subscriptions.get(&sid)
     }
@@ -469,35 +472,41 @@ impl Default for ReconnectConfig {
 
 impl ReconnectConfig {
     /// Create a new reconnect config with default values
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Set maximum retries (0 = infinite)
-    pub fn max_retries(mut self, retries: u32) -> Self {
+    #[must_use]
+    pub const fn max_retries(mut self, retries: u32) -> Self {
         self.max_retries = retries;
         self
     }
 
     /// Set initial delay in milliseconds
-    pub fn initial_delay_ms(mut self, ms: u64) -> Self {
+    #[must_use]
+    pub const fn initial_delay_ms(mut self, ms: u64) -> Self {
         self.initial_delay_ms = ms;
         self
     }
 
     /// Set maximum delay in milliseconds
-    pub fn max_delay_ms(mut self, ms: u64) -> Self {
+    #[must_use]
+    pub const fn max_delay_ms(mut self, ms: u64) -> Self {
         self.max_delay_ms = ms;
         self
     }
 
     /// Set backoff multiplier
-    pub fn backoff_multiplier(mut self, multiplier: f64) -> Self {
+    #[must_use]
+    pub const fn backoff_multiplier(mut self, multiplier: f64) -> Self {
         self.backoff_multiplier = multiplier;
         self
     }
 
     /// Calculate delay for a given retry attempt
+    #[must_use]
     pub fn delay_for_attempt(&self, attempt: u32) -> std::time::Duration {
         let delay = self.initial_delay_ms as f64 * self.backoff_multiplier.powi(attempt as i32);
         let delay_ms = delay.min(self.max_delay_ms as f64) as u64;
@@ -604,22 +613,26 @@ impl ReconnectingWebSocket {
     }
 
     /// Check if currently connected
+    #[must_use]
     pub fn is_connected(&self) -> bool {
         self.client.is_some()
     }
 
     /// Check if currently reconnecting
-    pub fn is_reconnecting(&self) -> bool {
+    #[must_use]
+    pub const fn is_reconnecting(&self) -> bool {
         self.is_reconnecting
     }
 
     /// Get the current reconnection attempt number
-    pub fn reconnect_attempt(&self) -> u32 {
+    #[must_use]
+    pub const fn reconnect_attempt(&self) -> u32 {
         self.reconnect_attempt
     }
 
     /// Get active subscriptions (if connected)
-    pub fn subscriptions(&self) -> Option<&HashMap<u64, SubscriptionInfo>> {
+    #[must_use]
+    pub fn subscriptions(&self) -> Option<&FxHashMap<u64, SubscriptionInfo>> {
         self.client.as_ref().map(|c| c.subscriptions())
     }
 

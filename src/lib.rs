@@ -132,17 +132,70 @@ impl KalshiClient {
     }
 
     /// Get a reference to the REST client
+    #[must_use]
     pub fn rest(&self) -> &client::rest::RestClient {
         &self.rest_client
     }
 
     /// Get a reference to the configuration
+    #[must_use]
     pub fn config(&self) -> &Config {
         &self.config
     }
 
-    // TODO: Add WebSocket connection method
-    // pub async fn websocket(&self) -> Result<client::websocket::WebSocketClient> { ... }
+    /// Create a new WebSocket connection
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// use kalshi_trading::{Config, KalshiClient};
+    ///
+    /// # async fn example() -> kalshi_trading::Result<()> {
+    /// let config = Config::new("api-key", "private-key-pem");
+    /// let client = KalshiClient::new(config)?;
+    ///
+    /// let mut ws = client.websocket().await?;
+    /// ws.subscribe_orderbook(&["KXBTC-25JAN"]).await?;
+    ///
+    /// while let Some(msg) = ws.next().await {
+    ///     println!("{:?}", msg);
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn websocket(&self) -> Result<client::websocket::WebSocketClient> {
+        client::websocket::WebSocketClient::connect(&self.config).await
+    }
+
+    /// Create a new WebSocket connection with automatic reconnection
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// use kalshi_trading::{Config, KalshiClient};
+    /// use kalshi_trading::client::websocket::ReconnectConfig;
+    ///
+    /// # async fn example() -> kalshi_trading::Result<()> {
+    /// let config = Config::new("api-key", "private-key-pem");
+    /// let client = KalshiClient::new(config)?;
+    ///
+    /// let reconnect = ReconnectConfig::default();
+    /// let mut ws = client.websocket_reconnecting(reconnect).await?;
+    /// ws.subscribe_orderbook(&["KXBTC-25JAN"]).await?;
+    ///
+    /// while let Some(msg) = ws.next().await {
+    ///     println!("{:?}", msg);
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn websocket_reconnecting(
+        &self,
+        reconnect_config: client::websocket::ReconnectConfig,
+    ) -> Result<client::websocket::ReconnectingWebSocket> {
+        client::websocket::ReconnectingWebSocket::connect(self.config.clone(), reconnect_config)
+            .await
+    }
 }
 
 #[cfg(test)]

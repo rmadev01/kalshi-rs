@@ -14,7 +14,7 @@
 //! When a gap is detected, the orderbook is marked as stale and should be
 //! re-synchronized via a snapshot request.
 
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 
 use parking_lot::RwLock;
 
@@ -81,14 +81,15 @@ struct OrderbookEntry {
 #[derive(Debug, Default)]
 pub struct OrderbookManager {
     /// Orderbooks by market ticker
-    books: RwLock<HashMap<String, RwLock<OrderbookEntry>>>,
+    books: RwLock<FxHashMap<String, RwLock<OrderbookEntry>>>,
 }
 
 impl OrderbookManager {
     /// Create a new orderbook manager
+    #[must_use]
     pub fn new() -> Self {
         Self {
-            books: RwLock::new(HashMap::new()),
+            books: RwLock::new(FxHashMap::default()),
         }
     }
 
@@ -124,12 +125,14 @@ impl OrderbookManager {
     }
 
     /// Get the state of an orderbook
+    #[must_use]
     pub fn get_state(&self, market_ticker: &str) -> Option<OrderbookState> {
         let books = self.books.read();
         books.get(market_ticker).map(|e| e.read().state)
     }
 
     /// Get all markets that need resync
+    #[must_use]
     pub fn markets_needing_resync(&self) -> Vec<String> {
         let books = self.books.read();
         books
@@ -148,12 +151,14 @@ impl OrderbookManager {
     /// Get a snapshot of an orderbook
     ///
     /// Returns a cloned copy of the orderbook for safe reading without holding locks.
+    #[must_use]
     pub fn get_orderbook(&self, market_ticker: &str) -> Option<Orderbook> {
         let books = self.books.read();
         books.get(market_ticker).map(|e| e.read().book.clone())
     }
 
     /// Get best bid for a market
+    #[must_use]
     pub fn best_bid(&self, market_ticker: &str) -> Option<(i64, i64)> {
         let books = self.books.read();
         books
@@ -162,6 +167,7 @@ impl OrderbookManager {
     }
 
     /// Get best ask for a market
+    #[must_use]
     pub fn best_ask(&self, market_ticker: &str) -> Option<(i64, i64)> {
         let books = self.books.read();
         books
@@ -170,6 +176,7 @@ impl OrderbookManager {
     }
 
     /// Get mid price for a market
+    #[must_use]
     pub fn mid_price(&self, market_ticker: &str) -> Option<f64> {
         let books = self.books.read();
         books
@@ -178,6 +185,7 @@ impl OrderbookManager {
     }
 
     /// Get spread for a market
+    #[must_use]
     pub fn spread(&self, market_ticker: &str) -> Option<i64> {
         let books = self.books.read();
         books
@@ -215,26 +223,46 @@ impl OrderbookManager {
     }
 
     /// Apply an orderbook snapshot
+    ///
+    /// Note: This method may briefly acquire a write lock on the books map
+    /// if the market doesn't exist and needs to be added.
     fn apply_snapshot(&self, snapshot: &OrderbookSnapshotMsg) {
         let ticker = &snapshot.msg.market_ticker;
-        let books = self.books.read();
 
-        // Auto-add market if not tracked
-        if let Some(entry) = books.get(ticker) {
-            let mut e = entry.write();
-            e.book.apply_snapshot(&snapshot.msg, snapshot.seq);
-            e.state = OrderbookState::Synchronized;
-            e.subscription_id = Some(snapshot.sid);
-        } else {
-            drop(books);
-            self.add_market(ticker);
+        // First, try with a read lock (common case - market already tracked)
+        {
             let books = self.books.read();
             if let Some(entry) = books.get(ticker) {
                 let mut e = entry.write();
                 e.book.apply_snapshot(&snapshot.msg, snapshot.seq);
                 e.state = OrderbookState::Synchronized;
                 e.subscription_id = Some(snapshot.sid);
+                return;
             }
+        }
+
+        // Market not found - need to add it with write lock
+        // This is the rare case, so we don't mind the lock upgrade
+        let mut books = self.books.write();
+
+        // Double-check in case another thread added it while we waited for write lock
+        if let Some(entry) = books.get(ticker) {
+            let mut e = entry.write();
+            e.book.apply_snapshot(&snapshot.msg, snapshot.seq);
+            e.state = OrderbookState::Synchronized;
+            e.subscription_id = Some(snapshot.sid);
+        } else {
+            // Create new entry
+            let mut book = Orderbook::new(ticker);
+            book.apply_snapshot(&snapshot.msg, snapshot.seq);
+            books.insert(
+                ticker.clone(),
+                RwLock::new(OrderbookEntry {
+                    book,
+                    state: OrderbookState::Synchronized,
+                    subscription_id: Some(snapshot.sid),
+                }),
+            );
         }
     }
 
@@ -286,16 +314,19 @@ impl OrderbookManager {
     }
 
     /// Get number of tracked markets
+    #[must_use]
     pub fn len(&self) -> usize {
         self.books.read().len()
     }
 
     /// Check if manager has no markets
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.books.read().is_empty()
     }
 
     /// Get all tracked market tickers
+    #[must_use]
     pub fn market_tickers(&self) -> Vec<String> {
         self.books.read().keys().cloned().collect()
     }

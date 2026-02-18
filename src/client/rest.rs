@@ -73,15 +73,18 @@ impl RestClient {
         let mut headers = HeaderMap::new();
         headers.insert(
             AuthHeaders::KEY_HEADER,
-            HeaderValue::from_str(&self.api_key_id).unwrap(),
+            HeaderValue::from_str(&self.api_key_id)
+                .map_err(|e| Error::Config(format!("Invalid API key ID for header: {}", e)))?,
         );
         headers.insert(
             AuthHeaders::TIMESTAMP_HEADER,
-            HeaderValue::from_str(&timestamp.to_string()).unwrap(),
+            HeaderValue::from_str(&timestamp.to_string())
+                .map_err(|e| Error::Config(format!("Invalid timestamp for header: {}", e)))?,
         );
         headers.insert(
             AuthHeaders::SIGNATURE_HEADER,
-            HeaderValue::from_str(&signature).unwrap(),
+            HeaderValue::from_str(&signature)
+                .map_err(|e| Error::Config(format!("Invalid signature for header: {}", e)))?,
         );
         headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
 
@@ -258,6 +261,7 @@ impl RestClient {
     }
 
     /// Get the base URL
+    #[must_use]
     pub fn base_url(&self) -> &str {
         &self.base_url
     }

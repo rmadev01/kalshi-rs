@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 /// Market status
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[non_exhaustive]
 pub enum MarketStatus {
     /// Market has not yet opened for trading
     Unopened,
@@ -23,6 +24,7 @@ pub enum MarketStatus {
 /// Settlement result
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[non_exhaustive]
 pub enum SettlementResult {
     /// Yes contracts paid out
     Yes,
@@ -161,6 +163,7 @@ pub struct Market {
 
 impl Market {
     /// Get the mid price in centi-cents (average of bid and ask)
+    #[must_use]
     pub fn mid_price(&self) -> Option<i64> {
         match (self.yes_bid, self.yes_ask) {
             (Some(bid), Some(ask)) => Some((bid + ask) / 2),
@@ -169,6 +172,7 @@ impl Market {
     }
 
     /// Get the spread in centi-cents
+    #[must_use]
     pub fn spread(&self) -> Option<i64> {
         match (self.yes_bid, self.yes_ask) {
             (Some(bid), Some(ask)) => Some(ask.saturating_sub(bid)),
@@ -177,7 +181,8 @@ impl Market {
     }
 
     /// Check if the market is tradeable
-    pub fn is_tradeable(&self) -> bool {
+    #[must_use]
+    pub const fn is_tradeable(&self) -> bool {
         matches!(self.status, MarketStatus::Open | MarketStatus::Active)
     }
 }

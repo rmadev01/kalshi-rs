@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 /// either YES or NO contracts. The prices always sum to 100 cents.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[non_exhaustive]
 pub enum Side {
     /// Yes contracts - pay out $1 if the event happens
     Yes,
@@ -20,7 +21,8 @@ pub enum Side {
 
 impl Side {
     /// Get the opposite side
-    pub fn opposite(self) -> Self {
+    #[must_use]
+    pub const fn opposite(self) -> Self {
         match self {
             Side::Yes => Side::No,
             Side::No => Side::Yes,
@@ -31,6 +33,7 @@ impl Side {
 /// Order action (buy or sell)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[non_exhaustive]
 pub enum Action {
     /// Buy contracts
     Buy,
@@ -41,6 +44,7 @@ pub enum Action {
 /// Order status
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[non_exhaustive]
 pub enum OrderStatus {
     /// Order is resting on the book
     Resting,
@@ -55,6 +59,7 @@ pub enum OrderStatus {
 /// Order type
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[non_exhaustive]
 pub enum OrderType {
     /// Limit order - specify price and quantity
     #[default]
@@ -66,6 +71,7 @@ pub enum OrderType {
 /// Self-trade prevention type
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum SelfTradePrevention {
     /// Cancel the resting order, execute the new order
     CancelResting,
@@ -136,6 +142,7 @@ pub struct CreateOrderRequest {
 /// Time-in-force options
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum TimeInForce {
     /// Good till canceled
     Gtc,
@@ -156,6 +163,7 @@ impl CreateOrderRequest {
     /// * `action` - Buy or Sell
     /// * `count` - Number of contracts
     /// * `price_centicents` - Price in centi-cents (e.g., 5000 = $0.50)
+    #[must_use]
     pub fn limit(
         ticker: impl Into<String>,
         side: Side,
@@ -183,6 +191,7 @@ impl CreateOrderRequest {
     }
 
     /// Create a new market order request
+    #[must_use]
     pub fn market(ticker: impl Into<String>, side: Side, action: Action, count: i64) -> Self {
         Self {
             ticker: ticker.into(),
@@ -204,30 +213,35 @@ impl CreateOrderRequest {
     }
 
     /// Set a client order ID for idempotency
+    #[must_use]
     pub fn with_client_order_id(mut self, id: impl Into<String>) -> Self {
         self.client_order_id = Some(id.into());
         self
     }
 
     /// Set the order group ID
+    #[must_use]
     pub fn with_order_group(mut self, group_id: impl Into<String>) -> Self {
         self.order_group_id = Some(group_id.into());
         self
     }
 
     /// Set time-in-force
+    #[must_use]
     pub fn with_time_in_force(mut self, tif: TimeInForce) -> Self {
         self.time_in_force = Some(tif);
         self
     }
 
     /// Set expiration time in seconds from now
+    #[must_use]
     pub fn with_expiration_ts(mut self, ts: i64) -> Self {
         self.expiration_ts = Some(ts);
         self
     }
 
     /// Set subaccount
+    #[must_use]
     pub fn with_subaccount(mut self, subaccount: i32) -> Self {
         self.subaccount = Some(subaccount);
         self

@@ -5,44 +5,60 @@
 //! API-specific errors.
 
 use std::fmt;
+use thiserror::Error;
 
 /// The main error type for this crate
-#[derive(Debug)]
+#[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum Error {
     /// HTTP request failed
-    Http(reqwest::Error),
+    #[error("HTTP error: {0}")]
+    Http(#[from] reqwest::Error),
 
     /// WebSocket error (boxed to reduce enum size)
-    WebSocket(Box<tokio_tungstenite::tungstenite::Error>),
+    #[error("WebSocket error: {0}")]
+    WebSocket(#[from] Box<tokio_tungstenite::tungstenite::Error>),
 
     /// JSON serialization/deserialization error
-    Json(serde_json::Error),
+    #[error("JSON error: {0}")]
+    Json(#[from] serde_json::Error),
 
     /// IO error (file reading, etc.)
-    Io(std::io::Error),
+    #[error("IO error: {0}")]
+    Io(#[from] std::io::Error),
 
     /// RSA cryptography error (key parsing, signing)
+    #[error("Crypto error: {0}")]
     Crypto(String),
 
     /// Invalid configuration (missing fields, bad format)
+    #[error("Configuration error: {0}")]
     Config(String),
 
     /// API returned an error response
+    #[error("API error ({status}): {message}", status = .0.status, message = .0.message)]
     Api(ApiError),
 
     /// Rate limit exceeded
+    #[error("{}", match .retry_after_ms {
+        Some(ms) => format!("Rate limited, retry after {}ms", ms),
+        None => "Rate limited".to_string(),
+    })]
     RateLimited {
         /// Retry after this many milliseconds
         retry_after_ms: Option<u64>,
     },
 
     /// Authentication failed
+    #[error("Authentication error: {0}")]
     Authentication(String),
 
     /// WebSocket connection closed unexpectedly
+    #[error("WebSocket connection closed")]
     ConnectionClosed,
 
     /// Orderbook sequence gap detected (missed messages)
+    #[error("Sequence gap: expected {expected}, got {got}")]
     SequenceGap {
         /// Expected sequence number
         expected: u64,
@@ -51,9 +67,11 @@ pub enum Error {
     },
 
     /// Invalid market ticker
+    #[error("Invalid ticker: {0}")]
     InvalidTicker(String),
 
     /// Operation timed out
+    #[error("Operation timed out")]
     Timeout,
 }
 
@@ -68,67 +86,22 @@ pub struct ApiError {
     pub message: String,
 }
 
-impl fmt::Display for Error {
+impl fmt::Display for ApiError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Error::Http(e) => write!(f, "HTTP error: {}", e),
-            Error::WebSocket(e) => write!(f, "WebSocket error: {}", e),
-            Error::Json(e) => write!(f, "JSON error: {}", e),
-            Error::Io(e) => write!(f, "IO error: {}", e),
-            Error::Crypto(msg) => write!(f, "Crypto error: {}", msg),
-            Error::Config(msg) => write!(f, "Configuration error: {}", msg),
-            Error::Api(e) => write!(f, "API error ({}): {}", e.status, e.message),
-            Error::RateLimited { retry_after_ms } => {
-                if let Some(ms) = retry_after_ms {
-                    write!(f, "Rate limited, retry after {}ms", ms)
-                } else {
-                    write!(f, "Rate limited")
-                }
-            }
-            Error::Authentication(msg) => write!(f, "Authentication error: {}", msg),
-            Error::ConnectionClosed => write!(f, "WebSocket connection closed"),
-            Error::SequenceGap { expected, got } => {
-                write!(f, "Sequence gap: expected {}, got {}", expected, got)
-            }
-            Error::InvalidTicker(ticker) => write!(f, "Invalid ticker: {}", ticker),
-            Error::Timeout => write!(f, "Operation timed out"),
+        if let Some(code) = &self.code {
+            write!(f, "[{}] {} (status {})", code, self.message, self.status)
+        } else {
+            write!(f, "{} (status {})", self.message, self.status)
         }
     }
 }
 
-impl std::error::Error for Error {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            Error::Http(e) => Some(e),
-            Error::WebSocket(e) => Some(e.as_ref()),
-            Error::Json(e) => Some(e),
-            Error::Io(e) => Some(e),
-            _ => None,
-        }
-    }
-}
+impl std::error::Error for ApiError {}
 
-impl From<reqwest::Error> for Error {
-    fn from(err: reqwest::Error) -> Self {
-        Error::Http(err)
-    }
-}
-
+// Manual From impl for tungstenite since it's boxed
 impl From<tokio_tungstenite::tungstenite::Error> for Error {
     fn from(err: tokio_tungstenite::tungstenite::Error) -> Self {
         Error::WebSocket(Box::new(err))
-    }
-}
-
-impl From<serde_json::Error> for Error {
-    fn from(err: serde_json::Error) -> Self {
-        Error::Json(err)
-    }
-}
-
-impl From<std::io::Error> for Error {
-    fn from(err: std::io::Error) -> Self {
-        Error::Io(err)
     }
 }
 
@@ -152,6 +125,7 @@ impl From<rsa::pkcs1::Error> for Error {
 
 impl ApiError {
     /// Create a new API error
+    #[must_use]
     pub fn new(status: u16, message: impl Into<String>) -> Self {
         Self {
             status,
@@ -161,6 +135,7 @@ impl ApiError {
     }
 
     /// Create an API error with an error code
+    #[must_use]
     pub fn with_code(status: u16, code: impl Into<String>, message: impl Into<String>) -> Self {
         Self {
             status,
@@ -170,13 +145,15 @@ impl ApiError {
     }
 
     /// Check if this is a client error (4xx)
-    pub fn is_client_error(&self) -> bool {
-        (400..500).contains(&self.status)
+    #[must_use]
+    pub const fn is_client_error(&self) -> bool {
+        self.status >= 400 && self.status < 500
     }
 
     /// Check if this is a server error (5xx)
-    pub fn is_server_error(&self) -> bool {
-        (500..600).contains(&self.status)
+    #[must_use]
+    pub const fn is_server_error(&self) -> bool {
+        self.status >= 500 && self.status < 600
     }
 }
 
@@ -207,5 +184,24 @@ mod tests {
         };
         assert!(err.to_string().contains("5"));
         assert!(err.to_string().contains("8"));
+    }
+
+    #[test]
+    fn test_api_error_with_code() {
+        let err = ApiError::with_code(401, "UNAUTHORIZED", "Invalid credentials");
+        assert!(err.to_string().contains("UNAUTHORIZED"));
+        assert!(err.to_string().contains("Invalid credentials"));
+        assert!(err.to_string().contains("401"));
+    }
+
+    #[test]
+    fn test_error_is_client_server() {
+        let client_err = ApiError::new(404, "Not found");
+        let server_err = ApiError::new(500, "Internal error");
+
+        assert!(client_err.is_client_error());
+        assert!(!client_err.is_server_error());
+        assert!(!server_err.is_client_error());
+        assert!(server_err.is_server_error());
     }
 }
