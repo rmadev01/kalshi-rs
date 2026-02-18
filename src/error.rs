@@ -144,6 +144,12 @@ impl From<rsa::pkcs8::Error> for Error {
     }
 }
 
+impl From<rsa::pkcs1::Error> for Error {
+    fn from(err: rsa::pkcs1::Error) -> Self {
+        Error::Crypto(format!("PKCS1 error: {}", err))
+    }
+}
+
 impl ApiError {
     /// Create a new API error
     pub fn new(status: u16, message: impl Into<String>) -> Self {

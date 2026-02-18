@@ -12,6 +12,8 @@ pub enum MarketStatus {
     Unopened,
     /// Market is open for trading
     Open,
+    /// Market is active (alias for open)
+    Active,
     /// Market is closed (no more trading)
     Closed,
     /// Market has been settled
@@ -26,6 +28,23 @@ pub enum SettlementResult {
     Yes,
     /// No contracts paid out
     No,
+}
+
+/// Deserialize helper that treats empty strings as None
+fn deserialize_optional_settlement<'de, D>(
+    deserializer: D,
+) -> Result<Option<SettlementResult>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::de::IntoDeserializer;
+
+    let opt: Option<String> = Option::deserialize(deserializer)?;
+    match opt {
+        None => Ok(None),
+        Some(s) if s.is_empty() => Ok(None),
+        Some(s) => SettlementResult::deserialize(s.into_deserializer()).map(Some),
+    }
 }
 
 /// A Kalshi market (binary contract)
@@ -90,6 +109,7 @@ pub struct Market {
     pub expected_expiration_time: Option<String>,
 
     /// Settlement result (if settled)
+    #[serde(default, deserialize_with = "deserialize_optional_settlement")]
     pub result: Option<SettlementResult>,
 
     /// Whether the market can close early
@@ -158,7 +178,7 @@ impl Market {
 
     /// Check if the market is tradeable
     pub fn is_tradeable(&self) -> bool {
-        self.status == MarketStatus::Open
+        matches!(self.status, MarketStatus::Open | MarketStatus::Active)
     }
 }
 

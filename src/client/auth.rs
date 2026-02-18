@@ -24,6 +24,7 @@
 //! ```
 
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
+use rsa::pkcs1::DecodeRsaPrivateKey;
 use rsa::pkcs8::DecodePrivateKey;
 use rsa::pss::SigningKey;
 use rsa::sha2::Sha256;
@@ -41,9 +42,12 @@ pub struct Signer {
 impl Signer {
     /// Create a new signer from a PEM-encoded private key
     ///
+    /// Supports both PKCS#8 (`-----BEGIN PRIVATE KEY-----`) and PKCS#1
+    /// (`-----BEGIN RSA PRIVATE KEY-----`) formats.
+    ///
     /// # Arguments
     ///
-    /// * `private_key_pem` - RSA private key in PEM format (PKCS#8)
+    /// * `private_key_pem` - RSA private key in PEM format (PKCS#8 or PKCS#1)
     ///
     /// # Errors
     ///
@@ -58,7 +62,9 @@ impl Signer {
     /// let signer = Signer::new(&pem).expect("Invalid key");
     /// ```
     pub fn new(private_key_pem: &str) -> Result<Self, Error> {
-        let private_key = RsaPrivateKey::from_pkcs8_pem(private_key_pem)?;
+        // Try PKCS#8 first, then fall back to PKCS#1
+        let private_key = RsaPrivateKey::from_pkcs8_pem(private_key_pem)
+            .or_else(|_| RsaPrivateKey::from_pkcs1_pem(private_key_pem))?;
         let signing_key = SigningKey::<Sha256>::new(private_key);
         Ok(Self { signing_key })
     }
