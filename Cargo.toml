@@ -1,0 +1,75 @@
+[package]
+name = "kalshi-rs"
+version = "0.1.0"
+edition = "2021"
+authors = ["rmadev01"]
+license = "MIT"
+description = "High-performance Rust client for the Kalshi prediction market API with HFT-grade orderbook"
+repository = "https://github.com/rmadev01/kalshi-rs"
+documentation = "https://docs.rs/kalshi-rs"
+readme = "README.md"
+keywords = ["kalshi", "trading", "api", "websocket", "orderbook"]
+categories = ["api-bindings", "asynchronous"]
+rust-version = "1.75"
+
+[dependencies]
+# Async runtime - Tokio is the gold standard for async Rust
+# "full" feature includes: rt-multi-thread, io-util, fs, net, time, sync, macros
+tokio = { version = "1", features = ["full"] }
+
+# WebSocket client built on Tokio
+# rustls-tls-webpki-roots for pure Rust TLS (no OpenSSL dependency)
+tokio-tungstenite = { version = "0.24", features = ["rustls-tls-webpki-roots"] }
+
+# HTTP client for REST API
+# rustls-tls is pure Rust TLS, avoiding OpenSSL dependency issues
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+
+# Serialization - Serde is the standard
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Error handling - thiserror for library errors
+thiserror = "2"
+
+# Structured logging - integrates with tokio-console for debugging
+tracing = "0.1"
+
+# Crypto for RSA-PSS request signing (Kalshi auth requirement)
+rsa = { version = "0.9", features = ["sha2"] }
+sha2 = "0.10"
+base64 = "0.22"
+rand = "0.8"
+
+# Performance optimizations for HFT:
+# parking_lot: Faster mutexes than std (no poisoning, smaller, spin-first)
+parking_lot = "0.12"
+# rustc-hash: FxHashMap is 2-3x faster than std HashMap for small keys
+rustc-hash = "2"
+
+# URL handling
+url = "2"
+
+# Futures utilities
+futures-util = { version = "0.3", default-features = false, features = ["sink"] }
+
+[dev-dependencies]
+tokio-test = "0.4"
+criterion = { version = "0.5", features = ["html_reports"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[[bench]]
+name = "orderbook"
+harness = false
+
+[profile.release]
+# LTO for smaller binary and better inlining across crates
+lto = "thin"
+# Single codegen unit for better optimization (slower compile, faster runtime)
+codegen-units = 1
+# Strip symbols for smaller binary
+strip = true
+
+[profile.bench]
+# Inherit from release but keep debug info for profiling
+debug = true
