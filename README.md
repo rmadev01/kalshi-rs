@@ -136,12 +136,157 @@ kalshi-rs/
 
 ### WebSocket Channels
 
-- [ ] `orderbook_delta` - Real-time orderbook updates
-- [ ] `ticker` - Price/volume updates  
-- [ ] `trade` - Public trade feed
-- [ ] `fill` - Your fill notifications
-- [ ] `user_orders` - Your order updates
-- [ ] `market_lifecycle_v2` - Market state changes
+- [x] `orderbook_delta` - Real-time orderbook updates
+- [x] `ticker` - Price/volume updates  
+- [x] `trade` - Public trade feed
+- [x] `fill` - Your fill notifications
+- [x] `user_orders` - Your order updates
+- [x] `market_lifecycle_v2` - Market state changes
+
+## WebSocket Usage
+
+### Basic WebSocket
+
+```rust
+use kalshi_rs::{Config, KalshiClient};
+use kalshi_rs::client::websocket::WebSocketClient;
+
+#[tokio::main]
+async fn main() -> Result<(), kalshi_rs::Error> {
+    let private_key = std::fs::read_to_string("private_key.pem")?;
+    let config = Config::new("your-api-key-id", &private_key);
+    
+    // Connect to WebSocket
+    let mut ws = WebSocketClient::connect(&config).await?;
+    
+    // Subscribe to orderbook updates
+    ws.subscribe_orderbook(&["KXBTC-25JAN"]).await?;
+    
+    // Subscribe to your fills
+    ws.subscribe_fills(None).await?;
+    
+    // Process messages
+    while let Some(result) = ws.next().await {
+        match result {
+            Ok(msg) => {
+                println!("Received: {:?}", msg);
+            }
+            Err(e) => {
+                eprintln!("Error: {}", e);
+                break;
+            }
+        }
+    }
+    
+    Ok(())
+}
+```
+
+### Reconnecting WebSocket
+
+For production use, use `ReconnectingWebSocket` which automatically reconnects and replays subscriptions:
+
+```rust
+use kalshi_rs::Config;
+use kalshi_rs::client::websocket::{ReconnectingWebSocket, ReconnectConfig};
+
+#[tokio::main]
+async fn main() -> Result<(), kalshi_rs::Error> {
+    let private_key = std::fs::read_to_string("private_key.pem")?;
+    let config = Config::new("your-api-key-id", &private_key);
+    
+    // Configure reconnection behavior
+    let reconnect_config = ReconnectConfig::new()
+        .max_retries(10)
+        .initial_delay_ms(100)
+        .max_delay_ms(30_000)
+        .backoff_multiplier(2.0);
+    
+    let mut ws = ReconnectingWebSocket::connect(config, reconnect_config).await?;
+    
+    // Subscriptions are automatically replayed on reconnection
+    ws.subscribe_orderbook(&["KXBTC-25JAN"]).await?;
+    
+    loop {
+        match ws.next().await {
+            Some(Ok(msg)) => {
+                // Handle message - reconnection happens automatically
+                println!("Message: {:?}", msg);
+            }
+            Some(Err(kalshi_rs::Error::ConnectionClosed)) => {
+                // Max retries exceeded
+                break;
+            }
+            Some(Err(e)) => {
+                eprintln!("Error: {}", e);
+            }
+            None => break,
+        }
+    }
+    
+    Ok(())
+}
+```
+
+## Orderbook Manager
+
+For tracking multiple orderbooks with automatic WebSocket integration:
+
+```rust
+use std::sync::Arc;
+use kalshi_rs::Config;
+use kalshi_rs::client::websocket::WebSocketClient;
+use kalshi_rs::orderbook::{OrderbookManager, OrderbookState};
+use kalshi_rs::types::WsMessage;
+
+#[tokio::main]
+async fn main() -> Result<(), kalshi_rs::Error> {
+    let private_key = std::fs::read_to_string("private_key.pem")?;
+    let config = Config::new("your-api-key-id", &private_key);
+    
+    // Create thread-safe orderbook manager
+    let manager = Arc::new(OrderbookManager::new());
+    
+    // Add markets to track
+    manager.add_market("KXBTC-25JAN");
+    manager.add_market("KXBTC-26JAN");
+    
+    // Connect and subscribe
+    let mut ws = WebSocketClient::connect(&config).await?;
+    ws.subscribe_orderbook(&["KXBTC-25JAN", "KXBTC-26JAN"]).await?;
+    
+    // Process messages
+    while let Some(Ok(msg)) = ws.next().await {
+        // Manager automatically applies snapshots and deltas
+        match manager.process_message(&msg) {
+            Ok(Some(ticker)) => {
+                // Orderbook was updated
+                if let Some((bid_price, bid_qty)) = manager.best_bid(&ticker) {
+                    if let Some((ask_price, ask_qty)) = manager.best_ask(&ticker) {
+                        println!(
+                            "{}: {} @ {} / {} @ {}",
+                            ticker, bid_qty, bid_price, ask_qty, ask_price
+                        );
+                    }
+                }
+            }
+            Err(kalshi_rs::Error::SequenceGap { expected, got }) => {
+                // Sequence gap detected - need to resync
+                eprintln!("Gap: expected {}, got {} - requesting resync", expected, got);
+            }
+            _ => {}
+        }
+        
+        // Check for markets needing resync
+        let stale = manager.markets_needing_resync();
+        if !stale.is_empty() {
+            println!("Markets needing resync: {:?}", stale);
+        }
+    }
+    
+    Ok(())
+}
+```
 
 ## Rate Limits
 

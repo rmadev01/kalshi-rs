@@ -26,6 +26,13 @@ pub enum WsCommand {
         /// Subscription IDs to unsubscribe
         params: UnsubscribeParams,
     },
+    /// Update an existing subscription (add/remove markets)
+    UpdateSubscription {
+        /// Message ID
+        id: u64,
+        /// Update parameters
+        params: UpdateSubscriptionParams,
+    },
     /// List current subscriptions
     ListSubscriptions {
         /// Message ID
@@ -50,6 +57,19 @@ pub struct UnsubscribeParams {
     pub sids: Vec<u64>,
 }
 
+/// Parameters for update_subscription command
+#[derive(Debug, Clone, Serialize)]
+pub struct UpdateSubscriptionParams {
+    /// Subscription ID to update
+    pub sid: u64,
+    /// Market tickers to add to the subscription
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub market_tickers_add: Option<Vec<String>>,
+    /// Market tickers to remove from the subscription
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub market_tickers_delete: Option<Vec<String>>,
+}
+
 /// WebSocket message received from the server
 #[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -58,6 +78,10 @@ pub enum WsMessage {
     Subscribed(SubscribedMsg),
     /// Unsubscription confirmed
     Unsubscribed(UnsubscribedMsg),
+    /// Subscription updated (markets added/removed)
+    SubscriptionUpdated(SubscriptionUpdatedMsg),
+    /// Subscriptions list response
+    SubscriptionsList(SubscriptionsListMsg),
     /// Error response
     Error(ErrorMsg),
     /// Orderbook snapshot (full book state)
@@ -72,6 +96,8 @@ pub enum WsMessage {
     Fill(FillMsg),
     /// User order update
     UserOrder(UserOrderMsg),
+    /// Market lifecycle event
+    MarketLifecycle(MarketLifecycleMsg),
 }
 
 /// Subscription confirmed message
@@ -99,6 +125,31 @@ pub struct UnsubscribedMsg {
     pub id: Option<u64>,
     /// Subscription ID that was unsubscribed
     pub sid: u64,
+}
+
+/// Subscription updated message
+#[derive(Debug, Clone, Deserialize)]
+pub struct SubscriptionUpdatedMsg {
+    /// Message ID
+    pub id: Option<u64>,
+    /// Subscription ID that was updated
+    pub sid: u64,
+}
+
+/// Subscriptions list response message
+#[derive(Debug, Clone, Deserialize)]
+pub struct SubscriptionsListMsg {
+    /// Message ID
+    pub id: Option<u64>,
+    /// List of active subscriptions
+    pub msg: SubscriptionsListData,
+}
+
+/// Subscriptions list data
+#[derive(Debug, Clone, Deserialize)]
+pub struct SubscriptionsListData {
+    /// Active subscriptions
+    pub subscriptions: Vec<SubscriptionInfo>,
 }
 
 /// Error message
@@ -282,6 +333,30 @@ pub struct UserOrderData {
     pub side: Side,
     /// Client order ID (if provided)
     pub client_order_id: Option<String>,
+}
+
+/// Market lifecycle event message
+#[derive(Debug, Clone, Deserialize)]
+pub struct MarketLifecycleMsg {
+    /// Subscription ID
+    pub sid: u64,
+    /// Lifecycle event data
+    pub msg: MarketLifecycleData,
+}
+
+/// Market lifecycle event data
+#[derive(Debug, Clone, Deserialize)]
+pub struct MarketLifecycleData {
+    /// Market ticker
+    pub market_ticker: String,
+    /// Event type (e.g., "opened", "closed", "settled")
+    pub event_type: String,
+    /// New market status
+    pub status: Option<String>,
+    /// Settlement result (if settled)
+    pub result: Option<String>,
+    /// Timestamp
+    pub ts: Option<TimestampMs>,
 }
 
 #[cfg(test)]

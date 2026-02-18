@@ -6,6 +6,12 @@
 //! - Cache efficiency (integer prices, minimal allocations)
 //! - Sequence tracking (detect missed WebSocket messages)
 //!
+//! # Components
+//!
+//! - [`Orderbook`] - Single market orderbook with delta/snapshot support
+//! - [`OrderbookManager`] - Thread-safe container for multiple orderbooks
+//! - [`OrderbookState`] - State enum for tracking sync status
+//!
 //! # Example
 //!
 //! ```rust
@@ -25,5 +31,7 @@
 //! ```
 
 pub mod book;
+pub mod manager;
 
 pub use book::Orderbook;
+pub use manager::{OrderbookManager, OrderbookState};
