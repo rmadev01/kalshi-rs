@@ -190,8 +190,10 @@ pub struct OrderbookSnapshotData {
     /// Market ticker
     pub market_ticker: String,
     /// Yes side bids: [[price, quantity], ...]
+    #[serde(default)]
     pub yes: Vec<[u64; 2]>,
     /// No side bids: [[price, quantity], ...]
+    #[serde(default)]
     pub no: Vec<[u64; 2]>,
 }
 
