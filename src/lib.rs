@@ -12,11 +12,11 @@
 //! ## Quick Start
 //!
 //! ```rust,no_run
-//! use kalshi_rs::{Config, KalshiClient};
-//! use kalshi_rs::types::{CreateOrderRequest, Side, Action};
+//! use kalshi_trading::{Config, KalshiClient};
+//! use kalshi_trading::types::{CreateOrderRequest, Side, Action};
 //!
 //! #[tokio::main]
-//! async fn main() -> Result<(), kalshi_rs::Error> {
+//! async fn main() -> Result<(), kalshi_trading::Error> {
 //!     // Create client with API credentials
 //!     let private_key = std::fs::read_to_string("private_key.pem")?;
 //!     let config = Config::new("api-key-id", &private_key);
@@ -90,10 +90,10 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// # Example
 ///
 /// ```rust,no_run
-/// use kalshi_rs::{Config, KalshiClient};
-/// use kalshi_rs::types::{CreateOrderRequest, Side, Action};
+/// use kalshi_trading::{Config, KalshiClient};
+/// use kalshi_trading::types::{CreateOrderRequest, Side, Action};
 ///
-/// # async fn example() -> kalshi_rs::Result<()> {
+/// # async fn example() -> kalshi_trading::Result<()> {
 /// let config = Config::new("api-key", "private-key-pem");
 /// let client = KalshiClient::new(config)?;
 ///

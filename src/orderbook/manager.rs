@@ -59,7 +59,7 @@ struct OrderbookEntry {
 /// # Example
 ///
 /// ```rust,no_run
-/// use kalshi_rs::orderbook::OrderbookManager;
+/// use kalshi_trading::orderbook::OrderbookManager;
 /// use std::sync::Arc;
 ///
 /// # async fn example() {

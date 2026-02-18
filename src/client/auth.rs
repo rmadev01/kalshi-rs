@@ -9,7 +9,7 @@
 //! # Example
 //!
 //! ```rust,no_run
-//! use kalshi_rs::client::auth::Signer;
+//! use kalshi_trading::client::auth::Signer;
 //!
 //! let private_key_pem = "-----BEGIN PRIVATE KEY-----\n...";
 //! let signer = Signer::new(private_key_pem).expect("Failed to parse key");
@@ -56,7 +56,7 @@ impl Signer {
     /// # Example
     ///
     /// ```rust,no_run
-    /// use kalshi_rs::client::auth::Signer;
+    /// use kalshi_trading::client::auth::Signer;
     ///
     /// let pem = std::fs::read_to_string("private_key.pem").unwrap();
     /// let signer = Signer::new(&pem).expect("Invalid key");
@@ -84,7 +84,7 @@ impl Signer {
     /// # Example
     ///
     /// ```rust,no_run
-    /// # use kalshi_rs::client::auth::Signer;
+    /// # use kalshi_trading::client::auth::Signer;
     /// # let signer = Signer::new("").unwrap();
     /// let timestamp = 1700000000000u64;
     /// let signature = signer.sign(timestamp, "GET", "/trade-api/v2/markets").unwrap();

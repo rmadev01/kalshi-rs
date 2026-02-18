@@ -6,8 +6,8 @@
 //! Optional:
 //!   KALSHI_ENV=demo  # Use demo environment (default: production)
 
-use kalshi_rs::config::Environment;
-use kalshi_rs::{Config, KalshiClient};
+use kalshi_trading::config::Environment;
+use kalshi_trading::{Config, KalshiClient};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {

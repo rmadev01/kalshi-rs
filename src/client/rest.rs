@@ -6,9 +6,9 @@
 //! # Example
 //!
 //! ```rust,no_run
-//! use kalshi_rs::{Config, KalshiClient};
+//! use kalshi_trading::{Config, KalshiClient};
 //!
-//! # async fn example() -> kalshi_rs::Result<()> {
+//! # async fn example() -> kalshi_trading::Result<()> {
 //! let config = Config::new("api-key", "private-key-pem");
 //! let client = KalshiClient::new(config)?;
 //!
@@ -280,7 +280,7 @@ impl RestClient {
     ///
     /// # Example
     /// ```rust,no_run
-    /// # async fn example(client: &kalshi_rs::client::RestClient) -> kalshi_rs::Result<()> {
+    /// # async fn example(client: &kalshi_trading::client::RestClient) -> kalshi_trading::Result<()> {
     /// let markets = client.get_markets(Some("open"), None, None).await?;
     /// # Ok(())
     /// # }
@@ -401,9 +401,9 @@ impl RestClient {
     ///
     /// # Example
     /// ```rust,no_run
-    /// use kalshi_rs::types::{CreateOrderRequest, Side, Action};
+    /// use kalshi_trading::types::{CreateOrderRequest, Side, Action};
     ///
-    /// # async fn example(client: &kalshi_rs::client::RestClient) -> kalshi_rs::Result<()> {
+    /// # async fn example(client: &kalshi_trading::client::RestClient) -> kalshi_trading::Result<()> {
     /// let order = CreateOrderRequest::limit("TICKER", Side::Yes, Action::Buy, 10, 5000);
     /// let response = client.create_order(&order).await?;
     /// println!("Order ID: {}", response.order.order_id);

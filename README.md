@@ -1,4 +1,4 @@
-# kalshi-rs
+# kalshi-trading
 
 A high-performance Rust client for the [Kalshi](https://kalshi.com) prediction market API, designed with HFT (High-Frequency Trading) workloads in mind.
 
@@ -16,18 +16,18 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-kalshi-rs = "0.1"
+kalshi-trading = "0.1"
 tokio = { version = "1", features = ["full"] }
 ```
 
 ## Quick Start
 
 ```rust
-use kalshi_rs::{KalshiClient, Config};
-use kalshi_rs::types::{CreateOrderRequest, Side, Action};
+use kalshi_trading::{KalshiClient, Config};
+use kalshi_trading::types::{CreateOrderRequest, Side, Action};
 
 #[tokio::main]
-async fn main() -> Result<(), kalshi_rs::Error> {
+async fn main() -> Result<(), kalshi_trading::Error> {
     // Load your private key
     let private_key = std::fs::read_to_string("private_key.pem")?;
     
@@ -90,7 +90,7 @@ This crate is designed for low-latency trading:
 ### Module Structure
 
 ```
-kalshi-rs/
+kalshi-trading/
 ├── client/       # REST and WebSocket clients
 │   ├── rest      # HTTP client with auth
 │   ├── websocket # Real-time data streaming  
@@ -148,11 +148,11 @@ kalshi-rs/
 ### Basic WebSocket
 
 ```rust
-use kalshi_rs::{Config, KalshiClient};
-use kalshi_rs::client::websocket::WebSocketClient;
+use kalshi_trading::{Config, KalshiClient};
+use kalshi_trading::client::websocket::WebSocketClient;
 
 #[tokio::main]
-async fn main() -> Result<(), kalshi_rs::Error> {
+async fn main() -> Result<(), kalshi_trading::Error> {
     let private_key = std::fs::read_to_string("private_key.pem")?;
     let config = Config::new("your-api-key-id", &private_key);
     
@@ -187,11 +187,11 @@ async fn main() -> Result<(), kalshi_rs::Error> {
 For production use, use `ReconnectingWebSocket` which automatically reconnects and replays subscriptions:
 
 ```rust
-use kalshi_rs::Config;
-use kalshi_rs::client::websocket::{ReconnectingWebSocket, ReconnectConfig};
+use kalshi_trading::Config;
+use kalshi_trading::client::websocket::{ReconnectingWebSocket, ReconnectConfig};
 
 #[tokio::main]
-async fn main() -> Result<(), kalshi_rs::Error> {
+async fn main() -> Result<(), kalshi_trading::Error> {
     let private_key = std::fs::read_to_string("private_key.pem")?;
     let config = Config::new("your-api-key-id", &private_key);
     
@@ -213,7 +213,7 @@ async fn main() -> Result<(), kalshi_rs::Error> {
                 // Handle message - reconnection happens automatically
                 println!("Message: {:?}", msg);
             }
-            Some(Err(kalshi_rs::Error::ConnectionClosed)) => {
+            Some(Err(kalshi_trading::Error::ConnectionClosed)) => {
                 // Max retries exceeded
                 break;
             }
@@ -234,13 +234,13 @@ For tracking multiple orderbooks with automatic WebSocket integration:
 
 ```rust
 use std::sync::Arc;
-use kalshi_rs::Config;
-use kalshi_rs::client::websocket::WebSocketClient;
-use kalshi_rs::orderbook::{OrderbookManager, OrderbookState};
-use kalshi_rs::types::WsMessage;
+use kalshi_trading::Config;
+use kalshi_trading::client::websocket::WebSocketClient;
+use kalshi_trading::orderbook::{OrderbookManager, OrderbookState};
+use kalshi_trading::types::WsMessage;
 
 #[tokio::main]
-async fn main() -> Result<(), kalshi_rs::Error> {
+async fn main() -> Result<(), kalshi_trading::Error> {
     let private_key = std::fs::read_to_string("private_key.pem")?;
     let config = Config::new("your-api-key-id", &private_key);
     
@@ -270,7 +270,7 @@ async fn main() -> Result<(), kalshi_rs::Error> {
                     }
                 }
             }
-            Err(kalshi_rs::Error::SequenceGap { expected, got }) => {
+            Err(kalshi_trading::Error::SequenceGap { expected, got }) => {
                 // Sequence gap detected - need to resync
                 eprintln!("Gap: expected {}, got {} - requesting resync", expected, got);
             }
@@ -306,7 +306,7 @@ The client handles 429 rate limit responses and provides `retry_after_ms` in the
 For testing, use Kalshi's demo environment:
 
 ```rust
-use kalshi_rs::{Config, config::Environment};
+use kalshi_trading::{Config, config::Environment};
 
 let config = Config::builder()
     .api_key_id("demo-api-key")

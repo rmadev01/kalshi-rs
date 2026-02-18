@@ -16,9 +16,9 @@
 //! KALSHI_API_KEY=your-key KALSHI_PRIVATE_KEY_PATH=./private_key.pem cargo test --test integration_rest
 //! ```
 
-use kalshi_rs::config::Environment;
-use kalshi_rs::types::{Action, CreateOrderRequest, Side};
-use kalshi_rs::{Config, KalshiClient};
+use kalshi_trading::config::Environment;
+use kalshi_trading::types::{Action, CreateOrderRequest, Side};
+use kalshi_trading::{Config, KalshiClient};
 
 /// Helper to create a client from environment variables
 fn create_client() -> Option<KalshiClient> {

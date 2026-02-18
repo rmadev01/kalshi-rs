@@ -1,12 +1,12 @@
 [package]
-name = "kalshi-rs"
+name = "kalshi-trading"
 version = "0.1.0"
 edition = "2021"
 authors = ["rmadev01"]
 license = "MIT"
 description = "High-performance Rust client for the Kalshi prediction market API with HFT-grade orderbook"
 repository = "https://github.com/rmadev01/kalshi-rs"
-documentation = "https://docs.rs/kalshi-rs"
+documentation = "https://docs.rs/kalshi-trading"
 readme = "README.md"
 keywords = ["kalshi", "trading", "api", "websocket", "orderbook"]
 categories = ["api-bindings", "asynchronous"]

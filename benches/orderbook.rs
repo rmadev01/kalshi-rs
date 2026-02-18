@@ -3,8 +3,8 @@
 //! Run with: `cargo bench`
 
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
-use kalshi_rs::orderbook::Orderbook;
-use kalshi_rs::types::order::Side;
+use kalshi_trading::orderbook::Orderbook;
+use kalshi_trading::types::order::Side;
 
 fn bench_orderbook_delta(c: &mut Criterion) {
     let mut group = c.benchmark_group("orderbook_delta");

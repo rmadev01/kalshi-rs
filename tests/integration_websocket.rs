@@ -18,10 +18,10 @@
 
 use std::time::Duration;
 
-use kalshi_rs::client::websocket::WebSocketClient;
-use kalshi_rs::config::Environment;
-use kalshi_rs::types::WsMessage;
-use kalshi_rs::{Config, KalshiClient};
+use kalshi_trading::client::websocket::WebSocketClient;
+use kalshi_trading::config::Environment;
+use kalshi_trading::types::WsMessage;
+use kalshi_trading::{Config, KalshiClient};
 use tokio::time::timeout;
 
 /// Helper to create a config from environment variables

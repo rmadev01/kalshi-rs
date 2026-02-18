@@ -38,13 +38,13 @@ impl Environment {
 /// # Example
 ///
 /// ```rust
-/// use kalshi_rs::Config;
+/// use kalshi_trading::Config;
 ///
 /// let config = Config::new("my-api-key-id", "-----BEGIN PRIVATE KEY-----\n...");
 ///
 /// // Use demo environment
 /// let demo_config = Config::new("key", "private-key")
-///     .with_environment(kalshi_rs::config::Environment::Demo);
+///     .with_environment(kalshi_trading::config::Environment::Demo);
 ///
 /// // Custom timeout
 /// let config = Config::new("key", "private-key")
@@ -79,7 +79,7 @@ impl Config {
     /// # Example
     ///
     /// ```rust
-    /// use kalshi_rs::Config;
+    /// use kalshi_trading::Config;
     ///
     /// let config = Config::new(
     ///     "abc123",

@@ -15,8 +15,8 @@
 //! # Example
 //!
 //! ```rust
-//! use kalshi_rs::orderbook::Orderbook;
-//! use kalshi_rs::types::order::Side;
+//! use kalshi_trading::orderbook::Orderbook;
+//! use kalshi_trading::types::order::Side;
 //!
 //! let mut book = Orderbook::new("KXBTC-25JAN");
 //!

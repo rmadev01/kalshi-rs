@@ -10,9 +10,9 @@
 //! # Example
 //!
 //! ```rust,no_run
-//! use kalshi_rs::{Config, KalshiClient};
+//! use kalshi_trading::{Config, KalshiClient};
 //!
-//! # async fn example() -> kalshi_rs::Result<()> {
+//! # async fn example() -> kalshi_trading::Result<()> {
 //! let config = Config::new("api-key", "private-key-pem");
 //! let client = KalshiClient::new(config)?;
 //!
@@ -532,10 +532,10 @@ pub enum SubscriptionRequest {
 /// # Example
 ///
 /// ```rust,no_run
-/// use kalshi_rs::Config;
-/// use kalshi_rs::client::websocket::{ReconnectingWebSocket, ReconnectConfig};
+/// use kalshi_trading::Config;
+/// use kalshi_trading::client::websocket::{ReconnectingWebSocket, ReconnectConfig};
 ///
-/// # async fn example() -> kalshi_rs::Result<()> {
+/// # async fn example() -> kalshi_trading::Result<()> {
 /// let config = Config::new("api-key", "private-key-pem");
 /// let reconnect_config = ReconnectConfig::default();
 ///
