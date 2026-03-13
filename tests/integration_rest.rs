@@ -49,7 +49,11 @@ async fn test_get_exchange_status() {
     let client = require_client!();
 
     let status = client.rest().get_exchange_status().await;
-    assert!(status.is_ok(), "Failed to get exchange status: {:?}", status);
+    assert!(
+        status.is_ok(),
+        "Failed to get exchange status: {:?}",
+        status
+    );
 
     let status = status.unwrap();
     println!("Exchange status: {:?}", status);
@@ -132,13 +136,17 @@ async fn test_get_orderbook() {
     println!("Getting orderbook for: {}", ticker);
 
     let orderbook = client.rest().get_orderbook(ticker).await;
-    assert!(orderbook.is_ok(), "Failed to get orderbook: {:?}", orderbook);
+    assert!(
+        orderbook.is_ok(),
+        "Failed to get orderbook: {:?}",
+        orderbook
+    );
 
     let orderbook = orderbook.unwrap();
     println!(
         "Orderbook has {} yes levels, {} no levels",
-        orderbook.orderbook.yes.len(),
-        orderbook.orderbook.no.len()
+        orderbook.orderbook_fp.yes_dollars.len(),
+        orderbook.orderbook_fp.no_dollars.len()
     );
 }
 
@@ -161,10 +169,7 @@ async fn test_get_balance() {
     assert!(balance.is_ok(), "Failed to get balance: {:?}", balance);
 
     let balance = balance.unwrap();
-    println!(
-        "Balance: ${:.2}",
-        balance.balance as f64 / 10000.0
-    );
+    println!("Balance: ${:.2}", balance.balance as f64 / 10000.0);
 }
 
 #[tokio::test]
@@ -172,7 +177,11 @@ async fn test_get_positions() {
     let client = require_client!();
 
     let positions = client.rest().get_positions(None, None, None, None).await;
-    assert!(positions.is_ok(), "Failed to get positions: {:?}", positions);
+    assert!(
+        positions.is_ok(),
+        "Failed to get positions: {:?}",
+        positions
+    );
 
     let positions = positions.unwrap();
     println!("Found {} positions", positions.event_positions.len());

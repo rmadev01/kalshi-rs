@@ -10,7 +10,7 @@ use std::collections::BTreeMap;
 
 use crate::types::messages::{OrderbookDeltaData, OrderbookSnapshotData};
 use crate::types::order::Side;
-use crate::types::{Price, Quantity};
+use crate::types::{parse_count, parse_dollars, Price, Quantity, DOLLAR_SCALE};
 
 /// HFT-optimized orderbook for a single Kalshi market.
 ///
@@ -81,22 +81,23 @@ impl Orderbook {
         self.yes_asks.clear();
 
         // Yes side in snapshot contains bids
-        for level in &snapshot.yes {
-            let price = level[0] as Price;
-            let quantity = level[1] as Quantity;
-            if quantity > 0 {
-                self.yes_bids.insert(price, quantity);
+        for level in &snapshot.yes_dollars_fp {
+            if let (Ok(price), Ok(quantity)) = (parse_dollars(&level[0]), parse_count(&level[1])) {
+                if quantity > 0 {
+                    self.yes_bids.insert(price, quantity);
+                }
             }
         }
 
         // No side in snapshot - convert to yes asks
         // No bid at price P = Yes ask at price (100 - P)
-        for level in &snapshot.no {
-            let no_price = level[0] as Price;
-            let quantity = level[1] as Quantity;
-            if quantity > 0 {
-                let yes_price = 100 - no_price;
-                self.yes_asks.insert(yes_price, quantity);
+        for level in &snapshot.no_dollars_fp {
+            if let (Ok(no_price), Ok(quantity)) = (parse_dollars(&level[0]), parse_count(&level[1]))
+            {
+                if quantity > 0 {
+                    let yes_price = DOLLAR_SCALE - no_price;
+                    self.yes_asks.insert(yes_price, quantity);
+                }
             }
         }
 
@@ -117,20 +118,20 @@ impl Orderbook {
 
         // Determine which side of the book to update
         let (book, price) = match delta.side {
-            Side::Yes => (&mut self.yes_bids, delta.price),
+            Side::Yes => (&mut self.yes_bids, delta.price_dollars),
             Side::No => {
                 // No delta affects yes asks at inverted price
-                let yes_price = 100 - delta.price;
+                let yes_price = DOLLAR_SCALE - delta.price_dollars;
                 (&mut self.yes_asks, yes_price)
             }
         };
 
         // Apply the delta
-        if delta.delta == 0 {
+        if delta.delta_fp == 0 {
             // No change
-        } else if delta.delta < 0 {
+        } else if delta.delta_fp < 0 {
             // Quantity decreased
-            let decrease = (-delta.delta) as Quantity;
+            let decrease = (-delta.delta_fp) as Quantity;
             if let Some(current) = book.get_mut(&price) {
                 if *current <= decrease {
                     book.remove(&price);
@@ -140,7 +141,7 @@ impl Orderbook {
             }
         } else {
             // Quantity increased
-            let increase = delta.delta as Quantity;
+            let increase = delta.delta_fp as Quantity;
             *book.entry(price).or_insert(0) += increase;
         }
 
@@ -318,12 +319,12 @@ mod tests {
     fn test_set_level() {
         let mut book = Orderbook::new("TEST");
 
-        book.set_level(50, 100, Side::Yes);
-        book.set_level(45, 50, Side::Yes);
-        book.set_level(55, 75, Side::No);
+        book.set_level(5_000, 100, Side::Yes);
+        book.set_level(4_500, 50, Side::Yes);
+        book.set_level(5_500, 75, Side::No);
 
-        assert_eq!(book.best_bid(), Some((50, 100)));
-        assert_eq!(book.best_ask(), Some((55, 75)));
+        assert_eq!(book.best_bid(), Some((5_000, 100)));
+        assert_eq!(book.best_ask(), Some((5_500, 75)));
     }
 
     #[test]
@@ -351,33 +352,33 @@ mod tests {
     fn test_mid_price_and_spread() {
         let mut book = Orderbook::new("TEST");
 
-        book.set_level(45, 100, Side::Yes); // Best bid
-        book.set_level(55, 100, Side::No); // Best ask
+        book.set_level(4_500, 100, Side::Yes); // Best bid
+        book.set_level(5_500, 100, Side::No); // Best ask
 
-        assert_eq!(book.mid_price(), Some(50.0));
-        assert_eq!(book.spread(), Some(10));
+        assert_eq!(book.mid_price(), Some(5_000.0));
+        assert_eq!(book.spread(), Some(1_000));
     }
 
     #[test]
     fn test_top_levels() {
         let mut book = Orderbook::new("TEST");
 
-        book.set_level(45, 100, Side::Yes);
-        book.set_level(44, 200, Side::Yes);
-        book.set_level(43, 300, Side::Yes);
+        book.set_level(4_500, 100, Side::Yes);
+        book.set_level(4_400, 200, Side::Yes);
+        book.set_level(4_300, 300, Side::Yes);
 
         let top = book.top_bids(2);
         assert_eq!(top.len(), 2);
-        assert_eq!(top[0], (45, 100)); // Best bid first
-        assert_eq!(top[1], (44, 200));
+        assert_eq!(top[0], (4_500, 100)); // Best bid first
+        assert_eq!(top[1], (4_400, 200));
     }
 
     #[test]
     fn test_crossed_book() {
         let mut book = Orderbook::new("TEST");
 
-        book.set_level(55, 100, Side::Yes); // Bid at 55
-        book.set_level(50, 100, Side::No); // Ask at 50
+        book.set_level(5_500, 100, Side::Yes); // Bid at 0.55
+        book.set_level(5_000, 100, Side::No); // Ask at 0.50
 
         assert!(book.is_crossed());
     }
@@ -385,8 +386,8 @@ mod tests {
     #[test]
     fn test_clear() {
         let mut book = Orderbook::new("TEST");
-        book.set_level(50, 100, Side::Yes);
-        book.set_level(55, 100, Side::No);
+        book.set_level(5_000, 100, Side::Yes);
+        book.set_level(5_500, 100, Side::No);
 
         assert!(!book.is_empty());
 

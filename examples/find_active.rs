@@ -19,8 +19,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .markets
         .iter()
         .filter_map(|m| {
-            let bid = m.yes_bid?;
-            let ask = m.yes_ask?;
+            let bid = m.yes_bid_dollars?;
+            let ask = m.yes_ask_dollars?;
             if bid > 0 && ask > 0 && ask > bid {
                 Some((m, ask - bid, bid, ask))
             } else {

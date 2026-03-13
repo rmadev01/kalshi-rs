@@ -1,364 +1,430 @@
+#![allow(missing_docs)]
+
 //! WebSocket message types.
-//!
-//! This module contains types for WebSocket commands sent to Kalshi
-//! and messages received from the WebSocket API.
 
 use serde::{Deserialize, Serialize};
 
-use super::order::Side;
-use super::{Price, Quantity, TimestampMs};
+use super::order::{Action, SelfTradePrevention, Side};
+use super::{
+    deserialize_count, deserialize_dollars, deserialize_optional_count,
+    deserialize_optional_dollars, TimestampMs,
+};
 
-/// WebSocket command sent to the server
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "cmd", rename_all = "snake_case")]
 pub enum WsCommand {
-    /// Subscribe to channels
     Subscribe {
-        /// Message ID
         id: u64,
-        /// Subscription parameters
         params: SubscribeParams,
     },
-    /// Unsubscribe from channels
     Unsubscribe {
-        /// Message ID
         id: u64,
-        /// Subscription IDs to unsubscribe
         params: UnsubscribeParams,
     },
-    /// Update an existing subscription (add/remove markets)
     UpdateSubscription {
-        /// Message ID
         id: u64,
-        /// Update parameters
         params: UpdateSubscriptionParams,
     },
-    /// List current subscriptions
     ListSubscriptions {
-        /// Message ID
         id: u64,
     },
 }
 
-/// Parameters for subscribe command
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Default, Serialize)]
 pub struct SubscribeParams {
-    /// Channels to subscribe to
     pub channels: Vec<String>,
-    /// Market tickers (optional)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub market_ticker: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub market_tickers: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub send_initial_snapshot: Option<bool>,
 }
 
-/// Parameters for unsubscribe command
 #[derive(Debug, Clone, Serialize)]
 pub struct UnsubscribeParams {
-    /// Subscription IDs to unsubscribe
     pub sids: Vec<u64>,
 }
 
-/// Parameters for update_subscription command
-#[derive(Debug, Clone, Serialize)]
-pub struct UpdateSubscriptionParams {
-    /// Subscription ID to update
-    pub sid: u64,
-    /// Market tickers to add to the subscription
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub market_tickers_add: Option<Vec<String>>,
-    /// Market tickers to remove from the subscription
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub market_tickers_delete: Option<Vec<String>>,
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum UpdateSubscriptionAction {
+    AddMarkets,
+    DeleteMarkets,
 }
 
-/// WebSocket message received from the server
+#[derive(Debug, Clone, Serialize)]
+pub struct UpdateSubscriptionParams {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sid: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sids: Option<Vec<u64>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub market_ticker: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub market_tickers: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub send_initial_snapshot: Option<bool>,
+    pub action: UpdateSubscriptionAction,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum WsMessage {
-    /// Subscription confirmed
     Subscribed(SubscribedMsg),
-    /// Unsubscription confirmed
     Unsubscribed(UnsubscribedMsg),
-    /// Subscription updated (markets added/removed)
-    SubscriptionUpdated(SubscriptionUpdatedMsg),
-    /// Subscriptions list response
-    SubscriptionsList(SubscriptionsListMsg),
-    /// Error response
+    #[serde(rename = "ok")]
+    Ok(OkMsg),
     Error(ErrorMsg),
-    /// Orderbook snapshot (full book state)
     OrderbookSnapshot(OrderbookSnapshotMsg),
-    /// Orderbook delta (incremental update)
     OrderbookDelta(OrderbookDeltaMsg),
-    /// Ticker update
     Ticker(TickerMsg),
-    /// Trade occurred
     Trade(TradeMsg),
-    /// Fill notification (your order was filled)
     Fill(FillMsg),
-    /// User order update
+    MarketPosition(MarketPositionMsg),
     UserOrder(UserOrderMsg),
-    /// Market lifecycle event
+    #[serde(rename = "market_lifecycle_v2")]
     MarketLifecycle(MarketLifecycleMsg),
+    EventLifecycle(EventLifecycleMsg),
+    OrderGroupUpdates(OrderGroupUpdatesMsg),
 }
 
-/// Subscription confirmed message
 #[derive(Debug, Clone, Deserialize)]
 pub struct SubscribedMsg {
-    /// Message ID (matches the request)
     pub id: Option<u64>,
-    /// Subscription details
     pub msg: SubscriptionInfo,
 }
 
-/// Subscription info
 #[derive(Debug, Clone, Deserialize)]
 pub struct SubscriptionInfo {
-    /// Channel name
     pub channel: String,
-    /// Subscription ID (use to unsubscribe)
     pub sid: u64,
 }
 
-/// Unsubscription confirmed message
 #[derive(Debug, Clone, Deserialize)]
 pub struct UnsubscribedMsg {
-    /// Message ID
     pub id: Option<u64>,
-    /// Subscription ID that was unsubscribed
     pub sid: u64,
+    pub seq: u64,
 }
 
-/// Subscription updated message
 #[derive(Debug, Clone, Deserialize)]
-pub struct SubscriptionUpdatedMsg {
-    /// Message ID
+pub struct OkMsg {
     pub id: Option<u64>,
-    /// Subscription ID that was updated
-    pub sid: u64,
+    pub sid: Option<u64>,
+    pub seq: Option<u64>,
+    #[serde(default)]
+    pub msg: Option<OkMsgData>,
 }
 
-/// Subscriptions list response message
 #[derive(Debug, Clone, Deserialize)]
-pub struct SubscriptionsListMsg {
-    /// Message ID
-    pub id: Option<u64>,
-    /// List of active subscriptions
-    pub msg: SubscriptionsListData,
+#[serde(untagged)]
+pub enum OkMsgData {
+    SubscriptionList(Vec<SubscriptionInfo>),
+    SubscriptionUpdate(SubscriptionUpdateOk),
 }
 
-/// Subscriptions list data
 #[derive(Debug, Clone, Deserialize)]
-pub struct SubscriptionsListData {
-    /// Active subscriptions
-    pub subscriptions: Vec<SubscriptionInfo>,
+pub struct SubscriptionUpdateOk {
+    #[serde(default)]
+    pub market_tickers: Vec<String>,
 }
 
-/// Error message
 #[derive(Debug, Clone, Deserialize)]
 pub struct ErrorMsg {
-    /// Message ID
     pub id: Option<u64>,
-    /// Error details
     pub msg: ErrorDetails,
 }
 
-/// Error details
 #[derive(Debug, Clone, Deserialize)]
 pub struct ErrorDetails {
-    /// Error code
     pub code: u32,
-    /// Error message
     pub msg: String,
+    #[serde(default)]
+    pub market_id: Option<String>,
+    #[serde(default)]
+    pub market_ticker: Option<String>,
 }
 
-/// Orderbook snapshot message
-///
-/// Contains the full state of the orderbook for a market.
-/// Price levels are represented as [price_cents, quantity] pairs.
 #[derive(Debug, Clone, Deserialize)]
 pub struct OrderbookSnapshotMsg {
-    /// Subscription ID
     pub sid: u64,
-    /// Sequence number
     pub seq: u64,
-    /// Snapshot data
     pub msg: OrderbookSnapshotData,
 }
 
-/// Orderbook snapshot data
 #[derive(Debug, Clone, Deserialize)]
 pub struct OrderbookSnapshotData {
-    /// Market ticker
     pub market_ticker: String,
-    /// Yes side bids: [[price, quantity], ...]
+    pub market_id: String,
     #[serde(default)]
-    pub yes: Vec<[u64; 2]>,
-    /// No side bids: [[price, quantity], ...]
+    pub yes_dollars_fp: Vec<[String; 2]>,
     #[serde(default)]
-    pub no: Vec<[u64; 2]>,
+    pub no_dollars_fp: Vec<[String; 2]>,
 }
 
-/// Orderbook delta message
-///
-/// Contains an incremental update to apply to the orderbook.
 #[derive(Debug, Clone, Deserialize)]
 pub struct OrderbookDeltaMsg {
-    /// Subscription ID
     pub sid: u64,
-    /// Sequence number (use to detect gaps)
     pub seq: u64,
-    /// Delta data
     pub msg: OrderbookDeltaData,
 }
 
-/// Orderbook delta data
 #[derive(Debug, Clone, Deserialize)]
 pub struct OrderbookDeltaData {
-    /// Market ticker
     pub market_ticker: String,
-    /// Price level that changed (in cents)
-    pub price: Price,
-    /// Change in quantity (can be negative)
-    pub delta: i64,
-    /// Side that changed
+    pub market_id: String,
+    #[serde(deserialize_with = "deserialize_dollars")]
+    pub price_dollars: i64,
+    #[serde(deserialize_with = "deserialize_count")]
+    pub delta_fp: i64,
     pub side: Side,
-    /// Timestamp
+    #[serde(default)]
     pub ts: Option<String>,
+    #[serde(default)]
+    pub client_order_id: Option<String>,
+    #[serde(default)]
+    pub subaccount: Option<i32>,
 }
 
-/// Ticker update message
 #[derive(Debug, Clone, Deserialize)]
 pub struct TickerMsg {
-    /// Subscription ID
     pub sid: u64,
-    /// Ticker data
     pub msg: TickerData,
 }
 
-/// Ticker data
 #[derive(Debug, Clone, Deserialize)]
 pub struct TickerData {
-    /// Market ticker
     pub market_ticker: String,
-    /// Last price in cents
-    pub price: Option<Price>,
-    /// Yes bid price
-    pub yes_bid: Option<Price>,
-    /// Yes ask price
-    pub yes_ask: Option<Price>,
-    /// 24h volume
-    pub volume: Option<u64>,
-    /// Open interest
-    pub open_interest: Option<u64>,
-    /// Timestamp (Unix ms)
-    pub ts: Option<TimestampMs>,
+    pub market_id: String,
+    #[serde(deserialize_with = "deserialize_dollars")]
+    pub price_dollars: i64,
+    #[serde(deserialize_with = "deserialize_dollars")]
+    pub yes_bid_dollars: i64,
+    #[serde(deserialize_with = "deserialize_dollars")]
+    pub yes_ask_dollars: i64,
+    #[serde(deserialize_with = "deserialize_count")]
+    pub volume_fp: i64,
+    #[serde(deserialize_with = "deserialize_count")]
+    pub open_interest_fp: i64,
+    pub dollar_volume: u64,
+    pub dollar_open_interest: u64,
+    pub ts: TimestampMs,
+    pub time: String,
 }
 
-/// Trade message
 #[derive(Debug, Clone, Deserialize)]
 pub struct TradeMsg {
-    /// Subscription ID
     pub sid: u64,
-    /// Trade data
     pub msg: TradeData,
 }
 
-/// Trade data
 #[derive(Debug, Clone, Deserialize)]
 pub struct TradeData {
-    /// Trade ID
     pub trade_id: String,
-    /// Market ticker
     pub market_ticker: String,
-    /// Yes price in cents
-    pub yes_price: Price,
-    /// No price in cents (100 - yes_price)
-    pub no_price: Price,
-    /// Number of contracts
-    pub count: Quantity,
-    /// Which side was the taker
+    #[serde(deserialize_with = "deserialize_dollars")]
+    pub yes_price_dollars: i64,
+    #[serde(deserialize_with = "deserialize_dollars")]
+    pub no_price_dollars: i64,
+    #[serde(deserialize_with = "deserialize_count")]
+    pub count_fp: i64,
     pub taker_side: Side,
-    /// Timestamp (Unix seconds)
     pub ts: TimestampMs,
 }
 
-/// Fill message (your order was filled)
 #[derive(Debug, Clone, Deserialize)]
 pub struct FillMsg {
-    /// Subscription ID
     pub sid: u64,
-    /// Fill data
     pub msg: FillData,
 }
 
-/// Fill data
 #[derive(Debug, Clone, Deserialize)]
 pub struct FillData {
-    /// Trade ID
     pub trade_id: String,
-    /// Order ID
     pub order_id: String,
-    /// Market ticker
     pub market_ticker: String,
-    /// Whether you were the taker
     pub is_taker: bool,
-    /// Side (yes/no)
     pub side: Side,
-    /// Yes price in cents
-    pub yes_price: Price,
-    /// Number of contracts filled
-    pub count: Quantity,
-    /// Action (buy/sell)
-    pub action: String,
-    /// Timestamp
+    #[serde(deserialize_with = "deserialize_dollars")]
+    pub yes_price_dollars: i64,
+    #[serde(deserialize_with = "deserialize_count")]
+    pub count_fp: i64,
+    #[serde(deserialize_with = "deserialize_dollars")]
+    pub fee_cost: i64,
+    pub action: Action,
     pub ts: TimestampMs,
+    #[serde(default)]
+    pub client_order_id: Option<String>,
+    #[serde(deserialize_with = "deserialize_count")]
+    pub post_position_fp: i64,
+    pub purchased_side: Side,
+    #[serde(default)]
+    pub subaccount: Option<i32>,
 }
 
-/// User order update message
+#[derive(Debug, Clone, Deserialize)]
+pub struct MarketPositionMsg {
+    pub sid: u64,
+    pub msg: MarketPositionData,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct MarketPositionData {
+    pub user_id: String,
+    pub market_ticker: String,
+    #[serde(deserialize_with = "deserialize_count")]
+    pub position_fp: i64,
+    pub position_cost: i64,
+    #[serde(deserialize_with = "deserialize_dollars")]
+    pub position_cost_dollars: i64,
+    pub realized_pnl: i64,
+    #[serde(deserialize_with = "deserialize_dollars")]
+    pub realized_pnl_dollars: i64,
+    pub fees_paid: i64,
+    #[serde(deserialize_with = "deserialize_dollars")]
+    pub fees_paid_dollars: i64,
+    pub position_fee_cost: i64,
+    #[serde(deserialize_with = "deserialize_dollars")]
+    pub position_fee_cost_dollars: i64,
+    #[serde(deserialize_with = "deserialize_count")]
+    pub volume_fp: i64,
+    #[serde(default)]
+    pub subaccount: Option<i32>,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct UserOrderMsg {
-    /// Subscription ID
     pub sid: u64,
-    /// Order data
     pub msg: UserOrderData,
 }
 
-/// User order data
 #[derive(Debug, Clone, Deserialize)]
 pub struct UserOrderData {
-    /// Order ID
     pub order_id: String,
-    /// Market ticker
+    pub user_id: String,
     pub ticker: String,
-    /// Order status
     pub status: String,
-    /// Side (yes/no)
     pub side: Side,
-    /// Client order ID (if provided)
-    pub client_order_id: Option<String>,
+    pub is_yes: bool,
+    #[serde(deserialize_with = "deserialize_dollars")]
+    pub yes_price_dollars: i64,
+    #[serde(deserialize_with = "deserialize_count")]
+    pub fill_count_fp: i64,
+    #[serde(deserialize_with = "deserialize_count")]
+    pub remaining_count_fp: i64,
+    #[serde(deserialize_with = "deserialize_count")]
+    pub initial_count_fp: i64,
+    #[serde(deserialize_with = "deserialize_dollars")]
+    pub taker_fill_cost_dollars: i64,
+    #[serde(deserialize_with = "deserialize_dollars")]
+    pub maker_fill_cost_dollars: i64,
+    #[serde(deserialize_with = "deserialize_dollars")]
+    pub taker_fees_dollars: i64,
+    #[serde(deserialize_with = "deserialize_dollars")]
+    pub maker_fees_dollars: i64,
+    pub client_order_id: String,
+    #[serde(default)]
+    pub order_group_id: Option<String>,
+    #[serde(default)]
+    pub self_trade_prevention_type: Option<SelfTradePrevention>,
+    pub created_time: String,
+    #[serde(default)]
+    pub last_update_time: Option<String>,
+    #[serde(default)]
+    pub expiration_time: Option<String>,
+    #[serde(default)]
+    pub subaccount_number: Option<i32>,
 }
 
-/// Market lifecycle event message
 #[derive(Debug, Clone, Deserialize)]
 pub struct MarketLifecycleMsg {
-    /// Subscription ID
     pub sid: u64,
-    /// Lifecycle event data
     pub msg: MarketLifecycleData,
 }
 
-/// Market lifecycle event data
 #[derive(Debug, Clone, Deserialize)]
 pub struct MarketLifecycleData {
-    /// Market ticker
     pub market_ticker: String,
-    /// Event type (e.g., "opened", "closed", "settled")
     pub event_type: String,
-    /// New market status
-    pub status: Option<String>,
-    /// Settlement result (if settled)
+    #[serde(default)]
+    pub open_ts: Option<TimestampMs>,
+    #[serde(default)]
+    pub close_ts: Option<TimestampMs>,
+    #[serde(default)]
     pub result: Option<String>,
-    /// Timestamp
-    pub ts: Option<TimestampMs>,
+    #[serde(default)]
+    pub determination_ts: Option<TimestampMs>,
+    #[serde(default, deserialize_with = "deserialize_optional_dollars")]
+    pub settlement_value: Option<i64>,
+    #[serde(default)]
+    pub settled_ts: Option<TimestampMs>,
+    #[serde(default)]
+    pub is_deactivated: Option<bool>,
+    #[serde(default)]
+    pub additional_metadata: Option<MarketLifecycleMetadata>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct MarketLifecycleMetadata {
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub title: Option<String>,
+    #[serde(default)]
+    pub yes_sub_title: Option<String>,
+    #[serde(default)]
+    pub no_sub_title: Option<String>,
+    #[serde(default)]
+    pub rules_primary: Option<String>,
+    #[serde(default)]
+    pub rules_secondary: Option<String>,
+    #[serde(default)]
+    pub can_close_early: Option<bool>,
+    #[serde(default)]
+    pub event_ticker: Option<String>,
+    #[serde(default)]
+    pub expected_expiration_ts: Option<TimestampMs>,
+    #[serde(default)]
+    pub strike_type: Option<String>,
+    #[serde(default)]
+    pub floor_strike: Option<f64>,
+    #[serde(default)]
+    pub cap_strike: Option<f64>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct EventLifecycleMsg {
+    pub sid: u64,
+    pub msg: EventLifecycleData,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct EventLifecycleData {
+    pub event_ticker: String,
+    pub title: String,
+    pub subtitle: String,
+    pub collateral_return_type: String,
+    pub series_ticker: String,
+    #[serde(default)]
+    pub strike_date: Option<TimestampMs>,
+    #[serde(default)]
+    pub strike_period: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct OrderGroupUpdatesMsg {
+    pub sid: u64,
+    pub seq: u64,
+    pub msg: OrderGroupUpdatesData,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct OrderGroupUpdatesData {
+    pub event_type: String,
+    pub order_group_id: String,
+    #[serde(default, deserialize_with = "deserialize_optional_count")]
+    pub contracts_limit_fp: Option<i64>,
 }
 
 #[cfg(test)]
@@ -371,7 +437,9 @@ mod tests {
             id: 1,
             params: SubscribeParams {
                 channels: vec!["orderbook_delta".to_string()],
+                market_ticker: None,
                 market_tickers: Some(vec!["KXBTC-25JAN".to_string()]),
+                send_initial_snapshot: None,
             },
         };
 
@@ -389,8 +457,9 @@ mod tests {
             "seq": 42,
             "msg": {
                 "market_ticker": "KXBTC-25JAN",
-                "price": 55,
-                "delta": -10,
+                "market_id": "123e4567-e89b-12d3-a456-426614174000",
+                "price_dollars": "0.5500",
+                "delta_fp": "-10.00",
                 "side": "yes",
                 "ts": "2024-01-15T12:00:00Z"
             }
@@ -401,8 +470,8 @@ mod tests {
             WsMessage::OrderbookDelta(delta) => {
                 assert_eq!(delta.seq, 42);
                 assert_eq!(delta.msg.market_ticker, "KXBTC-25JAN");
-                assert_eq!(delta.msg.price, 55);
-                assert_eq!(delta.msg.delta, -10);
+                assert_eq!(delta.msg.price_dollars, 5_500);
+                assert_eq!(delta.msg.delta_fp, -1_000);
             }
             _ => panic!("Expected OrderbookDelta"),
         }

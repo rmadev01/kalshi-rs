@@ -11,7 +11,7 @@ use kalshi_trading::client::websocket::WebSocketClient;
 use kalshi_trading::config::Environment;
 use kalshi_trading::orderbook::Orderbook;
 use kalshi_trading::types::messages::WsMessage;
-use kalshi_trading::types::Side;
+use kalshi_trading::types::{format_count, format_dollars, parse_count, parse_dollars};
 use kalshi_trading::{Config, KalshiClient};
 use std::collections::HashMap;
 
@@ -26,8 +26,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .init();
 
     // Read credentials from environment
-    let api_key =
-        std::env::var("KALSHI_API_KEY").expect("Set KALSHI_API_KEY environment variable");
+    let api_key = std::env::var("KALSHI_API_KEY").expect("Set KALSHI_API_KEY environment variable");
     let key_path = std::env::var("KALSHI_PRIVATE_KEY_PATH")
         .expect("Set KALSHI_PRIVATE_KEY_PATH environment variable");
 
@@ -63,14 +62,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let active_market = markets
                 .markets
                 .iter()
-                .filter(|m| m.volume > 0 || (m.yes_bid.is_some() && m.yes_ask.is_some()))
-                .max_by_key(|m| m.volume)
+                .filter(|m| {
+                    m.volume_fp.unwrap_or(0) > 0
+                        || (m.yes_bid_dollars.is_some() && m.yes_ask_dollars.is_some())
+                })
+                .max_by_key(|m| m.volume_fp.unwrap_or(0))
                 .or(markets.markets.first())
                 .ok_or("No markets found")?;
 
             println!(
-                "Selected: {} - {} (volume: {})",
-                active_market.ticker, active_market.title, active_market.volume
+                "Selected: {} - {} (volume_fp: {})",
+                active_market.ticker,
+                active_market.title,
+                active_market.volume_fp.unwrap_or(0)
             );
             active_market.ticker.clone()
         }
@@ -117,19 +121,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         println!(
                             "[SNAPSHOT] {} | {} yes levels, {} no levels | seq: {}",
                             data.market_ticker,
-                            data.yes.len(),
-                            data.no.len(),
+                            data.yes_dollars_fp.len(),
+                            data.no_dollars_fp.len(),
                             snapshot.seq
                         );
 
                         // Initialize orderbook from snapshot
                         if let Some(book) = orderbooks.get_mut(&data.market_ticker) {
                             book.clear();
-                            for level in &data.yes {
-                                book.set_level(level[0] as i64, level[1] as i64, Side::Yes);
+                            for level in &data.yes_dollars_fp {
+                                book.set_level(
+                                    parse_dollars(&level[0])?,
+                                    parse_count(&level[1])?,
+                                    kalshi_trading::types::Side::Yes,
+                                );
                             }
-                            for level in &data.no {
-                                book.set_level(level[0] as i64, level[1] as i64, Side::No);
+                            for level in &data.no_dollars_fp {
+                                book.set_level(
+                                    parse_dollars(&level[0])?,
+                                    parse_count(&level[1])?,
+                                    kalshi_trading::types::Side::No,
+                                );
                             }
                             print_book_summary(book);
                         }
@@ -139,11 +151,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         let data = &delta.msg;
                         if let Some(book) = orderbooks.get_mut(&data.market_ticker) {
                             // Apply delta
-                            book.apply_delta(data.price, data.delta, data.side);
+                            book.apply_delta(data.price_dollars, data.delta_fp, data.side);
 
                             println!(
                                 "[DELTA] {} | {:?} @ {} (delta: {:+}) | seq: {}",
-                                data.market_ticker, data.side, data.price, data.delta, delta.seq
+                                data.market_ticker,
+                                data.side,
+                                format_dollars(data.price_dollars),
+                                data.delta_fp,
+                                delta.seq
                             );
                             print_book_summary(book);
                         }
@@ -152,8 +168,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     WsMessage::Ticker(ticker_msg) => {
                         let data = &ticker_msg.msg;
                         println!(
-                            "[TICKER] {} | yes_bid: {:?} yes_ask: {:?} | volume: {:?}",
-                            data.market_ticker, data.yes_bid, data.yes_ask, data.volume
+                            "[TICKER] {} | yes_bid: {} yes_ask: {} | volume: {}",
+                            data.market_ticker,
+                            format_dollars(data.yes_bid_dollars),
+                            format_dollars(data.yes_ask_dollars),
+                            format_count(data.volume_fp)
                         );
                     }
 
@@ -161,7 +180,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         let data = &trade.msg;
                         println!(
                             "[TRADE] {} | {} contracts @ {} | taker: {:?}",
-                            data.market_ticker, data.count, data.yes_price, data.taker_side
+                            data.market_ticker,
+                            format_count(data.count_fp),
+                            format_dollars(data.yes_price_dollars),
+                            data.taker_side
                         );
                     }
 
@@ -169,7 +191,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         let data = &fill.msg;
                         println!(
                             "[FILL] {} | {:?} {} @ {} | order: {}",
-                            data.market_ticker, data.side, data.count, data.yes_price, data.order_id
+                            data.market_ticker,
+                            data.side,
+                            format_count(data.count_fp),
+                            format_dollars(data.yes_price_dollars),
+                            data.order_id
                         );
                     }
 
@@ -189,7 +215,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     }
 
                     _ => {
-                        // Other message types (SubscriptionUpdated, SubscriptionsList, etc.)
+                        // Other message types
                     }
                 }
 
@@ -221,12 +247,12 @@ fn print_book_summary(book: &Orderbook) {
     let mid = book.mid_price().unwrap_or(0.0);
 
     println!(
-        "         BID: {} @ {} | ASK: {} @ {} | spread: {} | mid: ${:.2}",
-        bid_qty,
-        best_bid,
-        ask_qty,
-        best_ask,
-        spread,
-        mid / 100.0
+        "         BID: {} @ {} | ASK: {} @ {} | spread: {} | mid: {}",
+        format_count(bid_qty),
+        format_dollars(best_bid),
+        format_count(ask_qty),
+        format_dollars(best_ask),
+        format_dollars(spread),
+        format_dollars(mid as i64)
     );
 }

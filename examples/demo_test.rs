@@ -12,8 +12,7 @@ use kalshi_trading::{Config, KalshiClient};
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Read credentials from environment
-    let api_key =
-        std::env::var("KALSHI_API_KEY").expect("Set KALSHI_API_KEY environment variable");
+    let api_key = std::env::var("KALSHI_API_KEY").expect("Set KALSHI_API_KEY environment variable");
     let key_path = std::env::var("KALSHI_PRIVATE_KEY_PATH")
         .expect("Set KALSHI_PRIVATE_KEY_PATH environment variable");
 
@@ -84,7 +83,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             for market in response.markets.iter().take(3) {
                 println!(
                     "  {} | {:?} | bid:{:?} ask:{:?}",
-                    market.ticker, market.status, market.yes_bid, market.yes_ask
+                    market.ticker, market.status, market.yes_bid_dollars, market.yes_ask_dollars
                 );
             }
         }
@@ -98,8 +97,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("Found {} positions", response.market_positions.len());
             for pos in response.market_positions.iter().take(5) {
                 println!(
-                    "  {} | position:{} | cost:{}",
-                    pos.ticker, pos.position, pos.position_cost
+                    "  {} | position_fp:{} | exposure:{}",
+                    pos.ticker, pos.position_fp, pos.market_exposure_dollars
                 );
             }
         }
@@ -118,8 +117,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     order.ticker,
                     order.side,
                     order.action,
-                    order.remaining_count,
-                    order.yes_price,
+                    order.remaining_count_fp,
+                    order.yes_price_dollars,
                     order.status
                 );
             }
@@ -135,7 +134,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             for fill in response.fills.iter().take(5) {
                 println!(
                     "  {} | {} {} | {} @ {}",
-                    fill.ticker, fill.side, fill.action, fill.count, fill.yes_price
+                    fill.ticker, fill.side, fill.action, fill.count_fp, fill.yes_price_dollars
                 );
             }
         }

@@ -39,7 +39,7 @@ async fn main() -> Result<(), kalshi_trading::Error> {
     let markets = client.rest().get_markets(Some("open"), None, None).await?;
     println!("Found {} open markets", markets.markets.len());
     
-    // Get your balance (values in centi-cents: 10000 = $1.00)
+    // Get your balance (values in cents)
     let balance = client.rest().get_balance().await?;
     println!("Balance: ${:.2}", balance.balance as f64 / 10000.0);
     
@@ -49,7 +49,7 @@ async fn main() -> Result<(), kalshi_trading::Error> {
         Side::Yes,
         Action::Buy,
         10,     // count
-        5000,   // price in centi-cents ($0.50)
+        5000,   // price in 1/10,000ths of a dollar ($0.5000)
     );
     let response = client.rest().create_order(&order).await?;
     println!("Order placed: {}", response.order.order_id);
@@ -63,14 +63,14 @@ async fn main() -> Result<(), kalshi_trading::Error> {
 
 ## Price Representation
 
-Kalshi uses **centi-cents** for subpenny precision:
+Kalshi v2 commonly uses fixed-point strings for prices and counts. This crate stores prices as integer ten-thousandths of a dollar:
 
-| Centi-cents | Cents | Dollars | Description |
-|-------------|-------|---------|-------------|
-| 100 | 1¢ | $0.01 | 1% implied probability |
-| 5000 | 50¢ | $0.50 | 50% implied probability |
-| 9900 | 99¢ | $0.99 | 99% implied probability |
-| 5050 | 50.5¢ | $0.505 | Subpenny pricing |
+| Stored Int | Dollars | Example API Value |
+|------------|---------|-------------------|
+| 100 | $0.0100 | `"0.0100"` |
+| 5000 | $0.5000 | `"0.5000"` |
+| 9900 | $0.9900 | `"0.9900"` |
+| 5050 | $0.5050 | `"0.5050"` |
 
 ## Architecture
 

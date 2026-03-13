@@ -35,7 +35,10 @@ use tokio_tungstenite::{MaybeTlsStream, WebSocketStream};
 use crate::client::auth::Signer;
 use crate::config::Config;
 use crate::error::Error;
-use crate::types::messages::{SubscribeParams, UpdateSubscriptionParams, WsCommand, WsMessage};
+use crate::types::messages::{
+    OkMsgData, SubscribeParams, UpdateSubscriptionAction, UpdateSubscriptionParams, WsCommand,
+    WsMessage,
+};
 
 type WsStream = WebSocketStream<MaybeTlsStream<TcpStream>>;
 
@@ -160,7 +163,7 @@ impl WebSocketClient {
     pub async fn subscribe_orderbook(&mut self, market_tickers: &[&str]) -> Result<u64, Error> {
         let tickers: Vec<String> = market_tickers.iter().map(|s| s.to_string()).collect();
         let msg_id = self.message_id;
-        
+
         self.pending_subscriptions.insert(
             msg_id,
             PendingSubscription {
@@ -173,7 +176,9 @@ impl WebSocketClient {
             id: msg_id,
             params: SubscribeParams {
                 channels: vec!["orderbook_delta".to_string()],
+                market_ticker: None,
                 market_tickers: Some(tickers),
+                send_initial_snapshot: None,
             },
         };
         self.send_command(cmd).await
@@ -203,7 +208,9 @@ impl WebSocketClient {
             id: msg_id,
             params: SubscribeParams {
                 channels: vec!["ticker".to_string()],
+                market_ticker: None,
                 market_tickers: tickers,
+                send_initial_snapshot: None,
             },
         };
         self.send_command(cmd).await
@@ -229,17 +236,16 @@ impl WebSocketClient {
             id: msg_id,
             params: SubscribeParams {
                 channels: vec!["trade".to_string()],
+                market_ticker: None,
                 market_tickers: tickers,
+                send_initial_snapshot: None,
             },
         };
         self.send_command(cmd).await
     }
 
     /// Subscribe to fill notifications (your trades)
-    pub async fn subscribe_fills(
-        &mut self,
-        market_tickers: Option<&[&str]>,
-    ) -> Result<u64, Error> {
+    pub async fn subscribe_fills(&mut self, market_tickers: Option<&[&str]>) -> Result<u64, Error> {
         let tickers = market_tickers.map(|t| t.iter().map(|s| s.to_string()).collect());
         let msg_id = self.message_id;
 
@@ -255,7 +261,9 @@ impl WebSocketClient {
             id: msg_id,
             params: SubscribeParams {
                 channels: vec!["fill".to_string()],
+                market_ticker: None,
                 market_tickers: tickers,
+                send_initial_snapshot: None,
             },
         };
         self.send_command(cmd).await
@@ -279,7 +287,9 @@ impl WebSocketClient {
             id: msg_id,
             params: SubscribeParams {
                 channels: vec!["user_orders".to_string()],
+                market_ticker: None,
                 market_tickers: None,
+                send_initial_snapshot: None,
             },
         };
         self.send_command(cmd).await
@@ -294,16 +304,15 @@ impl WebSocketClient {
     /// * `market_tickers` - Optional market tickers (None for all markets)
     pub async fn subscribe_market_lifecycle(
         &mut self,
-        market_tickers: Option<&[&str]>,
+        _market_tickers: Option<&[&str]>,
     ) -> Result<u64, Error> {
-        let tickers = market_tickers.map(|t| t.iter().map(|s| s.to_string()).collect());
         let msg_id = self.message_id;
 
         self.pending_subscriptions.insert(
             msg_id,
             PendingSubscription {
                 channel: "market_lifecycle_v2".to_string(),
-                market_tickers: tickers.clone(),
+                market_tickers: None,
             },
         );
 
@@ -311,7 +320,9 @@ impl WebSocketClient {
             id: msg_id,
             params: SubscribeParams {
                 channels: vec!["market_lifecycle_v2".to_string()],
-                market_tickers: tickers,
+                market_ticker: None,
+                market_tickers: None,
+                send_initial_snapshot: None,
             },
         };
         self.send_command(cmd).await
@@ -348,10 +359,18 @@ impl WebSocketClient {
         let cmd = WsCommand::UpdateSubscription {
             id: self.message_id,
             params: UpdateSubscriptionParams {
-                sid,
-                market_tickers_add: add_tickers.map(|t| t.iter().map(|s| s.to_string()).collect()),
-                market_tickers_delete: remove_tickers
+                sid: Some(sid),
+                sids: None,
+                market_ticker: None,
+                market_tickers: add_tickers
+                    .or(remove_tickers)
                     .map(|t| t.iter().map(|s| s.to_string()).collect()),
+                send_initial_snapshot: None,
+                action: if add_tickers.is_some() {
+                    UpdateSubscriptionAction::AddMarkets
+                } else {
+                    UpdateSubscriptionAction::DeleteMarkets
+                },
             },
         };
         self.send_command(cmd).await
@@ -428,6 +447,15 @@ impl WebSocketClient {
             }
             WsMessage::Unsubscribed(unsubscribed) => {
                 self.subscriptions.remove(&unsubscribed.sid);
+            }
+            WsMessage::Ok(ok) => {
+                if let Some(sid) = ok.sid {
+                    if let Some(OkMsgData::SubscriptionUpdate(update)) = &ok.msg {
+                        if let Some(subscription) = self.subscriptions.get_mut(&sid) {
+                            subscription.market_tickers = Some(update.market_tickers.clone());
+                        }
+                    }
+                }
             }
             _ => {}
         }
@@ -684,10 +712,7 @@ impl ReconnectingWebSocket {
     }
 
     /// Subscribe to fill notifications
-    pub async fn subscribe_fills(
-        &mut self,
-        market_tickers: Option<&[&str]>,
-    ) -> Result<u64, Error> {
+    pub async fn subscribe_fills(&mut self, market_tickers: Option<&[&str]>) -> Result<u64, Error> {
         let tickers = market_tickers.map(|t| t.iter().map(|s| s.to_string()).collect());
         self.subscription_requests
             .push(SubscriptionRequest::Fills(tickers));
@@ -782,7 +807,9 @@ impl ReconnectingWebSocket {
             }
 
             // Calculate and wait for backoff delay
-            let delay = self.reconnect_config.delay_for_attempt(self.reconnect_attempt);
+            let delay = self
+                .reconnect_config
+                .delay_for_attempt(self.reconnect_attempt);
             tokio::time::sleep(delay).await;
 
             self.reconnect_attempt += 1;
@@ -817,30 +844,30 @@ impl ReconnectingWebSocket {
                     client.subscribe_orderbook(&refs).await?;
                 }
                 SubscriptionRequest::Ticker(tickers) => {
-                    let refs = tickers.as_ref().map(|t| {
-                        t.iter().map(|s| s.as_str()).collect::<Vec<_>>()
-                    });
+                    let refs = tickers
+                        .as_ref()
+                        .map(|t| t.iter().map(|s| s.as_str()).collect::<Vec<_>>());
                     client.subscribe_ticker(refs.as_deref()).await?;
                 }
                 SubscriptionRequest::Trades(tickers) => {
-                    let refs = tickers.as_ref().map(|t| {
-                        t.iter().map(|s| s.as_str()).collect::<Vec<_>>()
-                    });
+                    let refs = tickers
+                        .as_ref()
+                        .map(|t| t.iter().map(|s| s.as_str()).collect::<Vec<_>>());
                     client.subscribe_trades(refs.as_deref()).await?;
                 }
                 SubscriptionRequest::Fills(tickers) => {
-                    let refs = tickers.as_ref().map(|t| {
-                        t.iter().map(|s| s.as_str()).collect::<Vec<_>>()
-                    });
+                    let refs = tickers
+                        .as_ref()
+                        .map(|t| t.iter().map(|s| s.as_str()).collect::<Vec<_>>());
                     client.subscribe_fills(refs.as_deref()).await?;
                 }
                 SubscriptionRequest::UserOrders => {
                     client.subscribe_user_orders().await?;
                 }
                 SubscriptionRequest::MarketLifecycle(tickers) => {
-                    let refs = tickers.as_ref().map(|t| {
-                        t.iter().map(|s| s.as_str()).collect::<Vec<_>>()
-                    });
+                    let refs = tickers
+                        .as_ref()
+                        .map(|t| t.iter().map(|s| s.as_str()).collect::<Vec<_>>());
                     client.subscribe_market_lifecycle(refs.as_deref()).await?;
                 }
             }
@@ -904,12 +931,30 @@ mod tests {
             .backoff_multiplier(2.0)
             .max_delay_ms(1000);
 
-        assert_eq!(config.delay_for_attempt(0), std::time::Duration::from_millis(100));
-        assert_eq!(config.delay_for_attempt(1), std::time::Duration::from_millis(200));
-        assert_eq!(config.delay_for_attempt(2), std::time::Duration::from_millis(400));
-        assert_eq!(config.delay_for_attempt(3), std::time::Duration::from_millis(800));
+        assert_eq!(
+            config.delay_for_attempt(0),
+            std::time::Duration::from_millis(100)
+        );
+        assert_eq!(
+            config.delay_for_attempt(1),
+            std::time::Duration::from_millis(200)
+        );
+        assert_eq!(
+            config.delay_for_attempt(2),
+            std::time::Duration::from_millis(400)
+        );
+        assert_eq!(
+            config.delay_for_attempt(3),
+            std::time::Duration::from_millis(800)
+        );
         // Should cap at max_delay_ms
-        assert_eq!(config.delay_for_attempt(4), std::time::Duration::from_millis(1000));
-        assert_eq!(config.delay_for_attempt(10), std::time::Duration::from_millis(1000));
+        assert_eq!(
+            config.delay_for_attempt(4),
+            std::time::Duration::from_millis(1000)
+        );
+        assert_eq!(
+            config.delay_for_attempt(10),
+            std::time::Duration::from_millis(1000)
+        );
     }
 }

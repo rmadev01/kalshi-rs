@@ -15,7 +15,7 @@
 //! // Get markets
 //! let markets = client.rest().get_markets(None, None, None).await?;
 //! for market in &markets.markets {
-//!     println!("{}: {:?}", market.ticker, market.yes_bid);
+//!     println!("{}: {:?}", market.ticker, market.yes_bid_dollars);
 //! }
 //! # Ok(())
 //! # }
@@ -53,9 +53,7 @@ impl RestClient {
     pub fn new(config: &Config) -> Result<Self, Error> {
         let signer = Signer::new(config.private_key_pem())?;
 
-        let client = Client::builder()
-            .timeout(config.timeout())
-            .build()?;
+        let client = Client::builder().timeout(config.timeout()).build()?;
 
         Ok(Self {
             client,
@@ -456,7 +454,7 @@ impl RestClient {
 
     /// Cancel an order.
     ///
-    /// Returns the canceled order with remaining_count set to 0.
+    /// Returns the canceled order together with the reduced quantity.
     pub async fn cancel_order(&self, order_id: &str) -> Result<CancelOrderResponse, Error> {
         self.delete(&format!("/portfolio/orders/{}", order_id))
             .await
@@ -464,7 +462,7 @@ impl RestClient {
 
     /// Amend an order's price and/or quantity.
     ///
-    /// The new count must be >= the current fill_count.
+    /// The new count must be >= the current filled quantity.
     pub async fn amend_order(
         &self,
         order_id: &str,
@@ -480,11 +478,8 @@ impl RestClient {
         order_id: &str,
         request: &DecreaseOrderRequest,
     ) -> Result<DecreaseOrderResponse, Error> {
-        self.post(
-            &format!("/portfolio/orders/{}/decrease", order_id),
-            request,
-        )
-        .await
+        self.post(&format!("/portfolio/orders/{}/decrease", order_id), request)
+            .await
     }
 
     /// Batch create multiple orders (up to 20).
@@ -512,7 +507,10 @@ impl RestClient {
         market_tickers: Option<&str>,
     ) -> Result<GetOrderQueuePositionsResponse, Error> {
         let path = match market_tickers {
-            Some(tickers) => format!("/portfolio/orders/queue_positions?market_tickers={}", tickers),
+            Some(tickers) => format!(
+                "/portfolio/orders/queue_positions?market_tickers={}",
+                tickers
+            ),
             None => "/portfolio/orders/queue_positions".to_string(),
         };
         self.get(&path).await

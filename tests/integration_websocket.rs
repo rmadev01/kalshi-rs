@@ -97,7 +97,7 @@ async fn test_subscribe_ticker() {
                 Ok(WsMessage::Ticker(ticker)) => {
                     println!(
                         "Ticker: {} - price: {:?}",
-                        ticker.msg.market_ticker, ticker.msg.price
+                        ticker.msg.market_ticker, ticker.msg.price_dollars
                     );
                     message_count += 1;
                     if message_count >= 3 {
@@ -190,15 +190,18 @@ async fn test_subscribe_orderbook() {
                     println!(
                         "Orderbook snapshot for {}: {} yes levels, {} no levels",
                         snapshot.msg.market_ticker,
-                        snapshot.msg.yes.len(),
-                        snapshot.msg.no.len()
+                        snapshot.msg.yes_dollars_fp.len(),
+                        snapshot.msg.no_dollars_fp.len()
                     );
                     received_snapshot = true;
                 }
                 Ok(WsMessage::OrderbookDelta(delta)) => {
                     println!(
                         "Delta: {} @ {} delta {} (seq: {})",
-                        delta.msg.market_ticker, delta.msg.price, delta.msg.delta, delta.seq
+                        delta.msg.market_ticker,
+                        delta.msg.price_dollars,
+                        delta.msg.delta_fp,
+                        delta.seq
                     );
                     delta_count += 1;
                     if delta_count >= 5 {

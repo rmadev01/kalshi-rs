@@ -360,8 +360,12 @@ mod tests {
             seq: 1,
             msg: OrderbookSnapshotData {
                 market_ticker: "TEST".to_string(),
-                yes: vec![[50, 100], [45, 200]],
-                no: vec![[55, 150]],
+                market_id: "mid".to_string(),
+                yes_dollars_fp: vec![
+                    ["0.5000".to_string(), "1.00".to_string()],
+                    ["0.4500".to_string(), "2.00".to_string()],
+                ],
+                no_dollars_fp: vec![["0.5500".to_string(), "1.50".to_string()]],
             },
         };
 
@@ -371,8 +375,8 @@ mod tests {
             manager.get_state("TEST"),
             Some(OrderbookState::Synchronized)
         );
-        assert_eq!(manager.best_bid("TEST"), Some((50, 100)));
-        assert_eq!(manager.best_ask("TEST"), Some((45, 150))); // 100 - 55 = 45
+        assert_eq!(manager.best_bid("TEST"), Some((5_000, 100)));
+        assert_eq!(manager.best_ask("TEST"), Some((4_500, 150))); // 1.0000 - 0.5500 = 0.4500
     }
 
     #[test]
@@ -385,8 +389,9 @@ mod tests {
             seq: 1,
             msg: OrderbookSnapshotData {
                 market_ticker: "TEST".to_string(),
-                yes: vec![[50, 100]],
-                no: vec![],
+                market_id: "mid".to_string(),
+                yes_dollars_fp: vec![["0.5000".to_string(), "1.00".to_string()]],
+                no_dollars_fp: vec![],
             },
         };
         manager.apply_snapshot(&snapshot);
@@ -397,16 +402,19 @@ mod tests {
             seq: 2,
             msg: OrderbookDeltaData {
                 market_ticker: "TEST".to_string(),
-                price: 50,
-                delta: 50,
+                market_id: "mid".to_string(),
+                price_dollars: 5_000,
+                delta_fp: 50,
                 side: Side::Yes,
                 ts: None,
+                client_order_id: None,
+                subaccount: None,
             },
         };
 
         let result = manager.apply_delta(&delta);
         assert!(result.is_ok());
-        assert_eq!(manager.best_bid("TEST"), Some((50, 150)));
+        assert_eq!(manager.best_bid("TEST"), Some((5_000, 150)));
     }
 
     #[test]
@@ -419,8 +427,9 @@ mod tests {
             seq: 1,
             msg: OrderbookSnapshotData {
                 market_ticker: "TEST".to_string(),
-                yes: vec![[50, 100]],
-                no: vec![],
+                market_id: "mid".to_string(),
+                yes_dollars_fp: vec![["0.5000".to_string(), "1.00".to_string()]],
+                no_dollars_fp: vec![],
             },
         };
         manager.apply_snapshot(&snapshot);
@@ -431,10 +440,13 @@ mod tests {
             seq: 3, // Gap!
             msg: OrderbookDeltaData {
                 market_ticker: "TEST".to_string(),
-                price: 50,
-                delta: 50,
+                market_id: "mid".to_string(),
+                price_dollars: 5_000,
+                delta_fp: 50,
                 side: Side::Yes,
                 ts: None,
+                client_order_id: None,
+                subaccount: None,
             },
         };
 
@@ -459,8 +471,9 @@ mod tests {
             seq: 1,
             msg: OrderbookSnapshotData {
                 market_ticker: "TEST1".to_string(),
-                yes: vec![],
-                no: vec![],
+                market_id: "mid".to_string(),
+                yes_dollars_fp: vec![],
+                no_dollars_fp: vec![],
             },
         };
         manager.apply_snapshot(&snapshot);

@@ -1,38 +1,46 @@
-//! Market and event types.
-//!
-//! This module contains types representing Kalshi markets and events.
+#![allow(missing_docs)]
+
+//! Market and portfolio types.
 
 use serde::{Deserialize, Serialize};
 
-/// Market status
+use crate::types::{
+    deserialize_count, deserialize_dollars, deserialize_optional_count,
+    deserialize_optional_dollars,
+};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum MarketStatus {
+    Initialized,
+    Inactive,
+    Active,
+    Closed,
+    Determined,
+    Disputed,
+    Amended,
+    Finalized,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 #[non_exhaustive]
-pub enum MarketStatus {
-    /// Market has not yet opened for trading
-    Unopened,
-    /// Market is open for trading
-    Open,
-    /// Market is active (alias for open)
-    Active,
-    /// Market is closed (no more trading)
-    Closed,
-    /// Market has been settled
-    Settled,
+pub enum MarketType {
+    Binary,
+    Scalar,
 }
 
-/// Settlement result
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 #[non_exhaustive]
 pub enum SettlementResult {
-    /// Yes contracts paid out
     Yes,
-    /// No contracts paid out
     No,
+    Scalar,
+    Void,
 }
 
-/// Deserialize helper that treats empty strings as None
 fn deserialize_optional_settlement<'de, D>(
     deserializer: D,
 ) -> Result<Option<SettlementResult>, D::Error>
@@ -49,528 +57,381 @@ where
     }
 }
 
-/// A Kalshi market (binary contract)
 #[derive(Debug, Clone, Deserialize)]
 pub struct Market {
-    /// Unique market ticker (e.g., "KXBTC-25JAN-T50000")
     pub ticker: String,
-
-    /// Event ticker this market belongs to
     pub event_ticker: String,
-
-    /// Series ticker this market belongs to
+    pub market_type: MarketType,
+    pub title: String,
+    pub subtitle: String,
+    pub yes_sub_title: String,
+    pub no_sub_title: String,
+    pub status: MarketStatus,
+    pub created_time: String,
+    pub updated_time: String,
+    pub open_time: String,
+    pub close_time: String,
+    pub expiration_time: String,
+    pub latest_expiration_time: String,
+    #[serde(default)]
+    pub expected_expiration_time: Option<String>,
+    pub settlement_timer_seconds: i64,
     #[serde(default)]
     pub series_ticker: Option<String>,
-
-    /// Market title/question
-    pub title: String,
-
-    /// Subtitle (short description)
-    pub subtitle: String,
-
-    /// Market status
-    pub status: MarketStatus,
-
-    /// Yes bid price in cents (centi-cents in API, we convert)
-    pub yes_bid: Option<i64>,
-
-    /// Yes ask price in cents (centi-cents in API, we convert)
-    pub yes_ask: Option<i64>,
-
-    /// Last trade price in cents
-    pub last_price: Option<i64>,
-
-    /// Previous yes bid
-    pub previous_yes_bid: Option<i64>,
-
-    /// Previous yes ask
-    pub previous_yes_ask: Option<i64>,
-
-    /// Previous price
-    pub previous_price: Option<i64>,
-
-    /// 24h volume (number of contracts traded)
     #[serde(default)]
-    pub volume: i64,
-
-    /// 24h volume in centi-cents
-    #[serde(default)]
-    pub dollar_volume: i64,
-
-    /// Open interest (contracts outstanding)
-    #[serde(default)]
-    pub open_interest: i64,
-
-    /// When trading opens (ISO 8601)
-    pub open_time: Option<String>,
-
-    /// When trading closes (ISO 8601)
-    pub close_time: Option<String>,
-
-    /// Expected expiration (ISO 8601)
-    pub expected_expiration_time: Option<String>,
-
-    /// Settlement result (if settled)
+    pub response_price_units: Option<String>,
+    #[serde(deserialize_with = "deserialize_dollars")]
+    pub notional_value_dollars: i64,
+    #[serde(deserialize_with = "deserialize_optional_dollars")]
+    pub yes_bid_dollars: Option<i64>,
+    #[serde(default, deserialize_with = "deserialize_optional_count")]
+    pub yes_bid_size_fp: Option<i64>,
+    #[serde(deserialize_with = "deserialize_optional_dollars")]
+    pub yes_ask_dollars: Option<i64>,
+    #[serde(default, deserialize_with = "deserialize_optional_count")]
+    pub yes_ask_size_fp: Option<i64>,
+    #[serde(default, deserialize_with = "deserialize_optional_dollars")]
+    pub no_bid_dollars: Option<i64>,
+    #[serde(default, deserialize_with = "deserialize_optional_dollars")]
+    pub no_ask_dollars: Option<i64>,
+    #[serde(default, deserialize_with = "deserialize_optional_dollars")]
+    pub last_price_dollars: Option<i64>,
+    #[serde(default, deserialize_with = "deserialize_optional_dollars")]
+    pub previous_yes_bid_dollars: Option<i64>,
+    #[serde(default, deserialize_with = "deserialize_optional_dollars")]
+    pub previous_yes_ask_dollars: Option<i64>,
+    #[serde(default, deserialize_with = "deserialize_optional_dollars")]
+    pub previous_price_dollars: Option<i64>,
+    #[serde(default, deserialize_with = "deserialize_optional_count")]
+    pub volume_fp: Option<i64>,
+    #[serde(default, deserialize_with = "deserialize_optional_count")]
+    pub volume_24h_fp: Option<i64>,
+    #[serde(default, deserialize_with = "deserialize_optional_dollars")]
+    pub liquidity_dollars: Option<i64>,
+    #[serde(default, deserialize_with = "deserialize_optional_count")]
+    pub open_interest_fp: Option<i64>,
     #[serde(default, deserialize_with = "deserialize_optional_settlement")]
     pub result: Option<SettlementResult>,
-
-    /// Whether the market can close early
-    #[serde(default)]
     pub can_close_early: bool,
-
-    /// Cap strike (for ranged markets)
-    pub cap_strike: Option<f64>,
-
-    /// Floor strike (for ranged markets)
-    pub floor_strike: Option<f64>,
-
-    /// Yes sub-title
-    pub yes_sub_title: Option<String>,
-
-    /// No sub-title
-    pub no_sub_title: Option<String>,
-
-    /// Risk limit in cents
-    pub risk_limit_cents: Option<i64>,
-
-    /// Notional value
-    pub notional_value: Option<i64>,
-
-    /// Tick size in centi-cents
+    pub fractional_trading_enabled: bool,
+    pub expiration_value: String,
+    pub rules_primary: String,
+    pub rules_secondary: String,
+    #[serde(default)]
     pub tick_size: Option<i64>,
-
-    /// Maker fee percentage (basis points)
-    pub maker_fee_bps: Option<i64>,
-
-    /// Taker fee percentage (basis points)
-    pub taker_fee_bps: Option<i64>,
-
-    /// Settlement timer in seconds
-    pub settlement_timer_seconds: Option<i64>,
-
-    /// Expiration value
-    pub expiration_value: Option<String>,
-
-    /// Category
+    #[serde(default)]
+    pub strike_type: Option<String>,
+    #[serde(default)]
+    pub floor_strike: Option<f64>,
+    #[serde(default)]
+    pub cap_strike: Option<f64>,
+    #[serde(default)]
     pub category: Option<String>,
-
-    /// Rules primary
-    pub rules_primary: Option<String>,
-
-    /// Rules secondary
-    pub rules_secondary: Option<String>,
 }
 
 impl Market {
-    /// Get the mid price in centi-cents (average of bid and ask)
     #[must_use]
     pub fn mid_price(&self) -> Option<i64> {
-        match (self.yes_bid, self.yes_ask) {
+        match (self.yes_bid_dollars, self.yes_ask_dollars) {
             (Some(bid), Some(ask)) => Some((bid + ask) / 2),
             _ => None,
         }
     }
 
-    /// Get the spread in centi-cents
     #[must_use]
     pub fn spread(&self) -> Option<i64> {
-        match (self.yes_bid, self.yes_ask) {
+        match (self.yes_bid_dollars, self.yes_ask_dollars) {
             (Some(bid), Some(ask)) => Some(ask.saturating_sub(bid)),
             _ => None,
         }
     }
 
-    /// Check if the market is tradeable
     #[must_use]
     pub const fn is_tradeable(&self) -> bool {
-        matches!(self.status, MarketStatus::Open | MarketStatus::Active)
+        matches!(self.status, MarketStatus::Active)
     }
 }
 
-/// A Kalshi event (container for multiple markets)
 #[derive(Debug, Clone, Deserialize)]
 pub struct Event {
-    /// Unique event ticker
     pub event_ticker: String,
-
-    /// Series ticker this event belongs to
     pub series_ticker: String,
-
-    /// Event title
     pub title: String,
-
-    /// Event subtitle
     #[serde(default)]
     pub subtitle: Option<String>,
-
-    /// Category (e.g., "Crypto", "Economics")
+    #[serde(default)]
     pub category: Option<String>,
-
-    /// Sub-title for the event
+    #[serde(default)]
     pub sub_title: Option<String>,
-
-    /// Mutually exclusive flag
     #[serde(default)]
     pub mutually_exclusive: bool,
-
-    /// Strike date (ISO 8601)
+    #[serde(default)]
     pub strike_date: Option<String>,
-
-    /// Markets in this event
     #[serde(default)]
     pub markets: Vec<Market>,
 }
 
-/// A Kalshi series (template for recurring events)
 #[derive(Debug, Clone, Deserialize)]
 pub struct Series {
-    /// Unique series ticker
     pub ticker: String,
-
-    /// Series title
     pub title: String,
-
-    /// Series category
+    #[serde(default)]
     pub category: Option<String>,
-
-    /// Tags associated with this series
     #[serde(default)]
     pub tags: Vec<String>,
-
-    /// Settlement sources
     #[serde(default)]
     pub settlement_sources: Vec<SettlementSource>,
-
-    /// Contract URL
+    #[serde(default)]
     pub contract_url: Option<String>,
 }
 
-/// Settlement source information
 #[derive(Debug, Clone, Deserialize)]
 pub struct SettlementSource {
-    /// Source URL
+    #[serde(default)]
     pub url: Option<String>,
-
-    /// Source name
+    #[serde(default)]
     pub name: Option<String>,
 }
 
-/// Response from GetMarkets endpoint
 #[derive(Debug, Clone, Deserialize)]
 pub struct GetMarketsResponse {
-    /// List of markets
     pub markets: Vec<Market>,
-
-    /// Cursor for pagination
     pub cursor: Option<String>,
 }
 
-/// Response from GetMarket endpoint
 #[derive(Debug, Clone, Deserialize)]
 pub struct GetMarketResponse {
-    /// The market
     pub market: Market,
 }
 
-/// Response from GetEvents endpoint
 #[derive(Debug, Clone, Deserialize)]
 pub struct GetEventsResponse {
-    /// List of events
     pub events: Vec<Event>,
-
-    /// Cursor for pagination
+    #[serde(default)]
     pub cursor: Option<String>,
 }
 
-/// Response from GetEvent endpoint
 #[derive(Debug, Clone, Deserialize)]
 pub struct GetEventResponse {
-    /// The event
     pub event: Event,
+    #[serde(default)]
+    pub markets: Vec<Market>,
 }
 
-/// Response from GetSeries endpoint
 #[derive(Debug, Clone, Deserialize)]
 pub struct GetSeriesResponse {
-    /// The series
     pub series: Series,
 }
 
-/// Response from GetSeriesList endpoint
 #[derive(Debug, Clone, Deserialize)]
 pub struct GetSeriesListResponse {
-    /// List of series
     pub series: Vec<Series>,
-
-    /// Cursor for pagination
     pub cursor: Option<String>,
 }
 
-/// Balance information
 #[derive(Debug, Clone, Deserialize)]
 pub struct Balance {
-    /// Available balance in cents
     pub balance: i64,
-
-    /// Portfolio value in cents
     pub portfolio_value: i64,
 }
 
-/// Response from GetBalance endpoint
 #[derive(Debug, Clone, Deserialize)]
 pub struct GetBalanceResponse {
-    /// Balance in cents
     pub balance: i64,
-
-    /// Portfolio value in cents
     pub portfolio_value: i64,
 }
 
-/// Position in a market
 #[derive(Debug, Clone, Deserialize)]
 pub struct Position {
-    /// Market ticker
     pub ticker: String,
-
-    /// Event ticker
-    pub event_ticker: String,
-
-    /// Position (positive = long, negative = short)
-    pub position: i64,
-
-    /// Cost basis in cents
-    pub position_cost: i64,
-
-    /// Realized P&L in cents
-    pub realized_pnl: i64,
-
-    /// Fees paid in cents
-    pub fees_paid: i64,
+    #[serde(deserialize_with = "deserialize_dollars")]
+    pub total_traded_dollars: i64,
+    #[serde(deserialize_with = "deserialize_count")]
+    pub position_fp: i64,
+    #[serde(deserialize_with = "deserialize_dollars")]
+    pub market_exposure_dollars: i64,
+    #[serde(deserialize_with = "deserialize_dollars")]
+    pub realized_pnl_dollars: i64,
+    pub resting_orders_count: i32,
+    #[serde(deserialize_with = "deserialize_dollars")]
+    pub fees_paid_dollars: i64,
+    #[serde(default)]
+    pub last_updated_ts: Option<String>,
 }
 
-/// Response from GetPositions endpoint
+#[derive(Debug, Clone, Deserialize)]
+pub struct EventPosition {
+    pub event_ticker: String,
+    #[serde(deserialize_with = "deserialize_dollars")]
+    pub total_cost_dollars: i64,
+    #[serde(deserialize_with = "deserialize_count")]
+    pub total_cost_shares_fp: i64,
+    #[serde(deserialize_with = "deserialize_dollars")]
+    pub event_exposure_dollars: i64,
+    #[serde(deserialize_with = "deserialize_dollars")]
+    pub realized_pnl_dollars: i64,
+    #[serde(deserialize_with = "deserialize_dollars")]
+    pub fees_paid_dollars: i64,
+    #[serde(default)]
+    pub resting_orders_count: i64,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct GetPositionsResponse {
-    /// List of positions
     #[serde(default)]
     pub market_positions: Vec<Position>,
-
-    /// Cursor for pagination
+    #[serde(default)]
     pub cursor: Option<String>,
-
-    /// Event positions (aggregated by event)
     #[serde(default)]
     pub event_positions: Vec<EventPosition>,
 }
 
-/// Event-level position aggregation
-#[derive(Debug, Clone, Deserialize)]
-pub struct EventPosition {
-    /// Event ticker
-    pub event_ticker: String,
-
-    /// Event exposure in centi-cents
-    pub event_exposure: i64,
-
-    /// Realized P&L in centi-cents
-    pub realized_pnl: i64,
-
-    /// Fees paid in centi-cents
-    pub fees_paid: i64,
-
-    /// Total cost in centi-cents
-    pub total_cost: i64,
-
-    /// Resting order count
-    #[serde(default)]
-    pub resting_order_count: i64,
-}
-
-/// A trade on the exchange
 #[derive(Debug, Clone, Deserialize)]
 pub struct Trade {
-    /// Trade ID
-    pub trade_id: Option<String>,
-
-    /// Market ticker
+    pub trade_id: String,
     pub ticker: String,
-
-    /// Number of contracts traded
-    pub count: i64,
-
-    /// Yes price in centi-cents
-    pub yes_price: i64,
-
-    /// No price in centi-cents
-    pub no_price: i64,
-
-    /// Taker side (yes or no)
-    pub taker_side: Option<String>,
-
-    /// Timestamp when trade occurred
+    #[serde(default)]
+    pub price: Option<i64>,
+    #[serde(deserialize_with = "deserialize_count")]
+    pub count_fp: i64,
+    #[serde(deserialize_with = "deserialize_dollars")]
+    pub yes_price_dollars: i64,
+    #[serde(deserialize_with = "deserialize_dollars")]
+    pub no_price_dollars: i64,
+    pub taker_side: String,
+    #[serde(default)]
     pub created_time: Option<String>,
 }
 
-/// Response from GetTrades endpoint
 #[derive(Debug, Clone, Deserialize)]
 pub struct GetTradesResponse {
-    /// List of trades
     pub trades: Vec<Trade>,
-
-    /// Cursor for pagination
     pub cursor: Option<String>,
 }
 
-/// A fill (your order matched)
 #[derive(Debug, Clone, Deserialize)]
 pub struct Fill {
-    /// Trade ID
-    pub trade_id: Option<String>,
-
-    /// Order ID
+    pub fill_id: String,
+    pub trade_id: String,
     pub order_id: String,
-
-    /// Market ticker
+    #[serde(default)]
+    pub client_order_id: Option<String>,
     pub ticker: String,
-
-    /// Side (yes or no)
+    pub market_ticker: String,
     pub side: String,
-
-    /// Action (buy or sell)
     pub action: String,
-
-    /// Number of contracts filled
-    pub count: i64,
-
-    /// Yes price in centi-cents
-    pub yes_price: i64,
-
-    /// No price in centi-cents
-    pub no_price: i64,
-
-    /// Whether you were the taker
+    #[serde(deserialize_with = "deserialize_count")]
+    pub count_fp: i64,
+    #[serde(deserialize_with = "deserialize_dollars")]
+    pub yes_price_dollars: i64,
+    #[serde(deserialize_with = "deserialize_dollars")]
+    pub no_price_dollars: i64,
     pub is_taker: bool,
-
-    /// Timestamp when fill occurred
+    #[serde(default)]
     pub created_time: Option<String>,
+    #[serde(deserialize_with = "deserialize_dollars")]
+    pub fee_cost: i64,
+    #[serde(default)]
+    pub subaccount_number: Option<i32>,
+    #[serde(default)]
+    pub ts: Option<i64>,
 }
 
-/// Response from GetFills endpoint
 #[derive(Debug, Clone, Deserialize)]
 pub struct GetFillsResponse {
-    /// List of fills
     pub fills: Vec<Fill>,
-
-    /// Cursor for pagination
     pub cursor: Option<String>,
 }
 
-/// Settlement record
 #[derive(Debug, Clone, Deserialize)]
 pub struct Settlement {
-    /// Market ticker
     pub ticker: String,
-
-    /// Settlement result (yes or no)
-    pub result: String,
-
-    /// Number of contracts settled
-    pub count: i64,
-
-    /// Revenue from settlement in centi-cents
+    pub event_ticker: String,
+    pub market_result: String,
+    #[serde(deserialize_with = "deserialize_count")]
+    pub yes_count_fp: i64,
+    pub yes_total_cost: i64,
+    #[serde(deserialize_with = "deserialize_dollars")]
+    pub yes_total_cost_dollars: i64,
+    #[serde(deserialize_with = "deserialize_count")]
+    pub no_count_fp: i64,
+    pub no_total_cost: i64,
+    #[serde(deserialize_with = "deserialize_dollars")]
+    pub no_total_cost_dollars: i64,
     pub revenue: i64,
-
-    /// Timestamp when settled
-    pub settled_time: Option<String>,
+    pub settled_time: String,
+    #[serde(deserialize_with = "deserialize_dollars")]
+    pub fee_cost: i64,
+    #[serde(default)]
+    pub value: Option<i64>,
 }
 
-/// Response from GetSettlements endpoint
 #[derive(Debug, Clone, Deserialize)]
 pub struct GetSettlementsResponse {
-    /// List of settlements
     pub settlements: Vec<Settlement>,
-
-    /// Cursor for pagination
     pub cursor: Option<String>,
 }
 
-/// Orderbook level (price and quantity)
 #[derive(Debug, Clone, Deserialize)]
 pub struct OrderbookLevel {
-    /// Price in centi-cents
+    #[serde(deserialize_with = "deserialize_dollars")]
     pub price: i64,
-
-    /// Total quantity at this price level
-    #[serde(default)]
+    #[serde(deserialize_with = "deserialize_count")]
     pub quantity: i64,
 }
 
-/// Market orderbook
 #[derive(Debug, Clone, Deserialize)]
 pub struct Orderbook {
-    /// Market ticker
-    pub ticker: String,
-
-    /// Yes bids (sorted best to worst, highest price first)
     #[serde(default)]
-    pub yes: Vec<Vec<i64>>,
-
-    /// No bids (sorted best to worst, highest price first)
+    pub yes_dollars: Vec<[String; 2]>,
     #[serde(default)]
-    pub no: Vec<Vec<i64>>,
+    pub no_dollars: Vec<[String; 2]>,
 }
 
-/// Response from GetOrderbook endpoint
 #[derive(Debug, Clone, Deserialize)]
 pub struct GetOrderbookResponse {
-    /// The orderbook
-    pub orderbook: Orderbook,
+    pub orderbook_fp: Orderbook,
 }
 
-/// Exchange status
 #[derive(Debug, Clone, Deserialize)]
 pub struct ExchangeStatus {
-    /// Whether the exchange is in trading mode
     pub trading_active: bool,
-
-    /// Whether the exchange is available
     pub exchange_active: bool,
 }
 
-/// Exchange schedule
 #[derive(Debug, Clone, Deserialize)]
 pub struct ExchangeSchedule {
-    /// Standard hours
-    pub standard_hours: Option<ScheduleHours>,
-
-    /// Next maintenance window
-    pub maintenance_windows: Option<Vec<MaintenanceWindow>>,
+    pub standard_hours: Vec<WeeklySchedule>,
+    pub maintenance_windows: Vec<MaintenanceWindow>,
 }
 
-/// Schedule hours
 #[derive(Debug, Clone, Deserialize)]
-pub struct ScheduleHours {
-    /// Open time
-    pub open_time: Option<String>,
-
-    /// Close time
-    pub close_time: Option<String>,
+pub struct WeeklySchedule {
+    pub start_time: String,
+    pub end_time: String,
+    pub monday: Vec<DailySchedule>,
+    pub tuesday: Vec<DailySchedule>,
+    pub wednesday: Vec<DailySchedule>,
+    pub thursday: Vec<DailySchedule>,
+    pub friday: Vec<DailySchedule>,
+    pub saturday: Vec<DailySchedule>,
+    pub sunday: Vec<DailySchedule>,
 }
 
-/// Maintenance window
+#[derive(Debug, Clone, Deserialize)]
+pub struct DailySchedule {
+    pub open_time: String,
+    pub close_time: String,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct MaintenanceWindow {
-    /// Start time
-    pub start_time: Option<String>,
-
-    /// End time
-    pub end_time: Option<String>,
+    pub start_datetime: String,
+    pub end_datetime: String,
 }
 
-/// Response from GetExchangeSchedule endpoint
 #[derive(Debug, Clone, Deserialize)]
 pub struct GetExchangeScheduleResponse {
-    /// The schedule
     pub schedule: ExchangeSchedule,
 }
 
@@ -583,48 +444,58 @@ mod tests {
         let market = Market {
             ticker: "TEST".to_string(),
             event_ticker: "TEST-EVENT".to_string(),
-            series_ticker: None,
+            market_type: MarketType::Binary,
             title: "Test".to_string(),
             subtitle: "Test".to_string(),
-            status: MarketStatus::Open,
-            yes_bid: Some(4500),
-            yes_ask: Some(5500),
-            last_price: Some(5000),
-            previous_yes_bid: None,
-            previous_yes_ask: None,
-            previous_price: None,
-            volume: 1000,
-            dollar_volume: 500,
-            open_interest: 100,
-            open_time: None,
-            close_time: None,
+            yes_sub_title: "Yes".to_string(),
+            no_sub_title: "No".to_string(),
+            status: MarketStatus::Active,
+            created_time: "2024-01-01T00:00:00Z".to_string(),
+            updated_time: "2024-01-01T00:00:00Z".to_string(),
+            open_time: "2024-01-01T00:00:00Z".to_string(),
+            close_time: "2024-01-02T00:00:00Z".to_string(),
+            expiration_time: "2024-01-02T00:00:00Z".to_string(),
+            latest_expiration_time: "2024-01-02T00:00:00Z".to_string(),
             expected_expiration_time: None,
+            settlement_timer_seconds: 60,
+            series_ticker: None,
+            response_price_units: None,
+            notional_value_dollars: 10_000,
+            yes_bid_dollars: Some(4_500),
+            yes_bid_size_fp: Some(1_000),
+            yes_ask_dollars: Some(5_500),
+            yes_ask_size_fp: Some(1_000),
+            no_bid_dollars: Some(4_500),
+            no_ask_dollars: Some(5_500),
+            last_price_dollars: Some(5_000),
+            previous_yes_bid_dollars: None,
+            previous_yes_ask_dollars: None,
+            previous_price_dollars: None,
+            volume_fp: Some(10_000),
+            volume_24h_fp: Some(10_000),
+            liquidity_dollars: Some(0),
+            open_interest_fp: Some(5_000),
             result: None,
             can_close_early: false,
-            cap_strike: None,
-            floor_strike: None,
-            yes_sub_title: None,
-            no_sub_title: None,
-            risk_limit_cents: None,
-            notional_value: None,
+            fractional_trading_enabled: false,
+            expiration_value: "".to_string(),
+            rules_primary: "Primary".to_string(),
+            rules_secondary: "Secondary".to_string(),
             tick_size: None,
-            maker_fee_bps: None,
-            taker_fee_bps: None,
-            settlement_timer_seconds: None,
-            expiration_value: None,
+            strike_type: None,
+            floor_strike: None,
+            cap_strike: None,
             category: None,
-            rules_primary: None,
-            rules_secondary: None,
         };
 
-        assert_eq!(market.mid_price(), Some(5000));
-        assert_eq!(market.spread(), Some(1000));
+        assert_eq!(market.mid_price(), Some(5_000));
+        assert_eq!(market.spread(), Some(1_000));
         assert!(market.is_tradeable());
     }
 
     #[test]
     fn test_market_status_serde() {
-        let json = serde_json::to_string(&MarketStatus::Open).unwrap();
-        assert_eq!(json, "\"open\"");
+        let json = serde_json::to_string(&MarketStatus::Active).unwrap();
+        assert_eq!(json, "\"active\"");
     }
 }
